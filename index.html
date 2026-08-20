@@ -50,6 +50,10 @@
             .print-only { display: block !important; }
             body { background: #ffffff !important; }
             main { padding: 0 !important; }
+            /* force เปิดเฉลยทุกข้อตอนพิมพ์ */
+            details:not([open]) > :not(summary) { display: block !important; }
+            details summary { list-style: none; }
+            details summary::-webkit-details-marker { display: none; }
         }
     </style>
 </head>
@@ -232,6 +236,7 @@
         // --- Unified Term Dictionary (source เดียวสำหรับ popup + glossary) ---
         const TERMS = {
             "OS": "โปรแกรมใหญ่ที่คอยดูแลเครื่องทั้งเครื่อง ทำหน้าที่แบ่ง CPU และหน่วยความจำให้ทุกโปรแกรมใช้ร่วมกันอย่างเป็นธรรม",
+            "Kernel": "แกนกลางของ OS มีสิทธิสูงสุด ทำคำสั่งอันตรายแทนโปรแกรมให้ เปรียบเสมือนหัวใจของระบบ",
             "Kernel Mode": "โหมดของระบบ มีสิทธิทำได้ทุกอย่าง (Mode bit = 0)",
             "Privileged Instructions": "คำสั่งอันตรายที่เฉพาะระบบเท่านั้นใช้ได้ เช่น สั่งการฮาร์ดแวร์โดยตรง",
             "User Mode": "โหมดของโปรแกรมทั่วไป ถูกจำกัดสิทธิ ต้องขอให้ OS ทำแทน (Mode bit = 1)",
@@ -887,25 +892,41 @@
 
                     <div className="bg-slate-50 p-5 rounded-xl border border-blue-300">
                         <h3 className="text-xl font-bold text-slate-900 mb-3"><i className="fa-solid fa-eye mr-2 text-blue-600"></i> ภาพรวมทั้งชีวิตของ Process ในรูปเดียว</h3>
-                        <Diagram title="fork() → exec() → exit() → wait() พร้อม PID" w={720} h={380}>
-                            <DCode x={20} y={25} w={280} h={105} title="Parent — PID 100" stroke="#2563eb"
-                                code={"pid_t pid = fork();\nif (pid > 0) {\n  wait(NULL);  // pid = 101\n}"} />
-                            <DCode x={420} y={25} w={280} h={105} title="Child — PID 101" stroke="#16a34a" titleColor="#16a34a"
-                                code={"if (pid == 0) {\n  execlp(\"/bin/ls\", \"ls\", NULL);\n  exit(0);\n}"} />
-                            <DArrow x1={302} y1={70} x2={415} y2={70} color="#2563eb" />
-                            <text x={360} y={12} textAnchor="middle" fill="#2563eb" fontSize="10.5" fontWeight="bold">fork() คืน PID ของลูก (101) ให้แม่</text>
-                            <text x={360} y={24} textAnchor="middle" fill="#16a34a" fontSize="10.5" fontWeight="bold">และคืน 0 ให้ลูก</text>
-                            <DBox x={420} y={170} w={280} h={65} title="PID 101 → โปรแกรม /bin/ls" sub={["exec() ไม่สร้าง process ใหม่ — PID เดิม"]} stroke="#7c3aed" />
-                            <DArrow x1={560} y1={132} x2={560} y2={165} color="#7c3aed" />
-                            <text x={616} y={150} textAnchor="middle" fill="#7c3aed" fontSize="10">exec() แทนที่โปรแกรม</text>
-                            <DBox x={420} y={280} w={280} h={65} title="Zombie (PID 101)" sub={["exit() แล้ว PCB ค้างรอแม่"]} stroke="#dc2626" />
-                            <DArrow x1={560} y1={238} x2={560} y2={275} color="#dc2626" />
-                            <text x={596} y={260} textAnchor="middle" fill="#dc2626" fontSize="10">exit()</text>
-                            <DArrow x1={250} y1={200} x2={425} y2={290} dashed={true} color="#a16207" />
-                            <text x={258} y={242} textAnchor="middle" fill="#a16207" fontSize="10">wait() เก็บสถานะ</text>
-                            <text x={258} y={256} textAnchor="middle" fill="#a16207" fontSize="10">→ กำจัด Zombie</text>
-                            <DBox x={60} y={170} w={190} h={60} title="Parent รันต่อ" sub={["wait() คืน PID = 101"]} stroke="#2563eb" />
-                            <DArrow x1={155} y1={132} x2={155} y2={165} color="#2563eb" />
+                        <Diagram title="fork() → exec() → exit() → wait() พร้อม PID" w={760} h={515}>
+                            <DCode x={230} y={25} w={300} h={160} title="โค้ดชุดเดียวกัน — ทั้งแม่และลูก" stroke="#2563eb"
+                                code={"pid_t pid = fork();\nif (pid == 0) {\n  execlp(\"/bin/ls\", \"ls\", NULL);\n  exit(0);  // ถ้า exec พัง\n} else if (pid > 0) {\n  wait(NULL);\n  printf(\"เสร็จแล้ว\\n\");\n}"} />
+
+                            {/* fork split tree */}
+                            <DArrow x1={380} y1={188} x2={380} y2={215} color="#2563eb" />
+                            <DArrow x1={380} y1={215} x2={175} y2={215} color="#2563eb" />
+                            <DArrow x1={380} y1={215} x2={585} y2={215} color="#16a34a" />
+                            <DArrow x1={175} y1={215} x2={175} y2={244} color="#2563eb" />
+                            <DArrow x1={585} y1={215} x2={585} y2={244} color="#16a34a" />
+                            <text x={380} y={202} textAnchor="middle" fill="#2563eb" fontSize="11" fontWeight="bold">fork()</text>
+                            <text x={270} y={209} textAnchor="middle" fill="#2563eb" fontSize="10" fontWeight="bold">คืน 101 ให้แม่</text>
+                            <text x={490} y={209} textAnchor="middle" fill="#16a34a" fontSize="10" fontWeight="bold">คืน 0 ให้ลูก</text>
+
+                            {/* Parent column (branch แม่) */}
+                            <DBox x={55} y={250} w={250} h={60} title="Parent — PID 100" sub={["ได้ pid = 101 → เดิน branch แม่"]} stroke="#2563eb" />
+                            <DBox x={55} y={335} w={250} h={60} title="wait(NULL) — รอลูกทำงาน" sub={["สถานะ Waiting (Blocked)"]} stroke="#a16207" />
+                            <DBox x={55} y={420} w={250} h={60} title="wait คืน PID 101 → แม่รันต่อ" sub={["printf(\"เสร็จแล้ว\") แล้วแม่จบ"]} stroke="#2563eb" />
+                            <DArrow x1={180} y1={312} x2={180} y2={331} color="#64748b" />
+                            <DArrow x1={180} y1={397} x2={180} y2={416} color="#64748b" />
+
+                            {/* Child column (branch ลูก) */}
+                            <DBox x={455} y={250} w={250} h={60} title="Child — PID 101" sub={["ได้ pid = 0 → เดิน branch ลูก"]} stroke="#16a34a" />
+                            <DBox x={455} y={335} w={250} h={60} title="exec() → กลายเป็น /bin/ls" sub={["PID เดิม 101 ไม่สร้าง process ใหม่"]} stroke="#7c3aed" />
+                            <DBox x={455} y={420} w={250} h={60} title="exit() → Zombie (PID 101)" sub={["PCB ค้างรอแม่รับสถานะ"]} stroke="#dc2626" />
+                            <DArrow x1={580} y1={312} x2={580} y2={331} color="#7c3aed" />
+                            <text x={612} y={324} textAnchor="middle" fill="#7c3aed" fontSize="10" fontWeight="bold">exec()</text>
+                            <DArrow x1={580} y1={397} x2={580} y2={416} color="#dc2626" />
+                            <text x={612} y={409} textAnchor="middle" fill="#dc2626" fontSize="10" fontWeight="bold">exit()</text>
+
+                            {/* wait reaps zombie */}
+                            <DArrow x1={305} y1={380} x2={500} y2={418} dashed={true} color="#a16207" />
+                            <text x={352} y={352} textAnchor="middle" fill="#a16207" fontSize="10" fontWeight="bold">wait() เก็บสถานะ → กำจัด Zombie</text>
+
+                            <text x={380} y={503} textAnchor="middle" fill="#64748b" fontSize="11">โค้ดชุดเดียว! หลัง fork() ทั้งคู่รันต่อจากบรรทัดเดียวกัน แล้วแยกเดินกันคนละ branch ตามค่า pid ที่ได้</text>
                         </Diagram>
                         <p className="text-sm text-slate-700 mb-1"><strong className="text-blue-600">โค้ดสมบูรณ์ของภาพนี้ — คัดลอกไปรันได้เลย:</strong></p>
                         <CodeBlock language="c" code={`#include <stdio.h>
@@ -1513,14 +1534,40 @@ int main() {
                     </div>
 
                     <div className="bg-slate-50 p-5 rounded-xl border border-slate-300">
-                        <h3 className="text-xl font-bold text-slate-900 mb-3"><i className="fa-solid fa-ruler mr-2 text-emerald-600"></i> เกณฑ์วัด Scheduling (จำสูตรให้ขึ้นใจ!)</h3>
-                        <ul className="list-disc ml-6 space-y-1 text-sm text-slate-700">
-                            <li><Term word="CPU Utilization"><strong className="text-slate-900">CPU Utilization:</strong></Term> เปอร์เซ็นต์เวลาที่ CPU ทำงานจริง (อยากให้สูง)</li>
-                            <li><Term word="Throughput"><strong className="text-slate-900">Throughput:</strong></Term> จำนวน Process ที่เสร็จต่อหน่วยเวลา (อยากให้สูง)</li>
-                            <li><Term word="Turnaround Time"><strong className="text-slate-900">Turnaround Time (TAT):</strong></Term> เวลาทั้งหมดตั้งแต่เกิดจนเสร็จ = Completion Time − Arrival Time</li>
-                            <li><Term word="Waiting Time"><strong className="text-slate-900">Waiting Time (WT):</strong></Term> เวลาที่รออยู่ใน Ready Queue = TAT − Burst Time</li>
-                            <li><Term word="Response Time"><strong className="text-slate-900">Response Time:</strong></Term> เวลาตั้งแต่ส่งงานจนได้ "เริ่ม" ตอบสนองครั้งแรก (สำคัญกับระบบ Interactive)</li>
-                        </ul>
+                        <h3 className="text-xl font-bold text-slate-900 mb-3"><i className="fa-solid fa-ruler mr-2 text-emerald-600"></i> เกณฑ์วัด Scheduling — สูตรทั้งหมด (จำให้ขึ้นใจ!)</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                            <div className="bg-white p-3 rounded border border-slate-300">
+                                <strong className="text-blue-600 block mb-1">Turnaround Time (TAT)</strong>
+                                <code className="font-mono text-slate-900 block bg-slate-100 rounded px-2 py-1">TAT = CT − AT</code>
+                                <span className="text-xs text-slate-600">เวลาทั้งหมดตั้งแต่เกิดจนเสร็จ (Completion − Arrival)</span>
+                            </div>
+                            <div className="bg-white p-3 rounded border border-slate-300">
+                                <strong className="text-emerald-600 block mb-1">Waiting Time (WT)</strong>
+                                <code className="font-mono text-slate-900 block bg-slate-100 rounded px-2 py-1">WT = TAT − BT</code>
+                                <span className="text-xs text-slate-600">เวลาที่รอเฉย ๆ ในคิว (ไม่รวมเวลารัน)</span>
+                            </div>
+                            <div className="bg-white p-3 rounded border border-slate-300">
+                                <strong className="text-purple-600 block mb-1">Response Time (RT)</strong>
+                                <code className="font-mono text-slate-900 block bg-slate-100 rounded px-2 py-1">RT = เวลาได้ CPU ครั้งแรก − AT</code>
+                                <span className="text-xs text-slate-600">รอแค่ "ได้เริ่มตอบสนอง" ครั้งแรก (RR ชนะเลิศ)</span>
+                            </div>
+                            <div className="bg-white p-3 rounded border border-slate-300">
+                                <strong className="text-amber-600 block mb-1">ค่าเฉลี่ย</strong>
+                                <code className="font-mono text-slate-900 block bg-slate-100 rounded px-2 py-1">Avg = Σของทุก Process ÷ จำนวน Process</code>
+                                <span className="text-xs text-slate-600">โจทย์ถาม "Average" ต้องหารด้วย n เสมอ!</span>
+                            </div>
+                            <div className="bg-white p-3 rounded border border-slate-300">
+                                <Term word="Throughput"><strong className="text-cyan-700 block mb-1">Throughput</strong></Term>
+                                <code className="font-mono text-slate-900 block bg-slate-100 rounded px-2 py-1">Throughput = จำนวนงานที่เสร็จ ÷ เวลาทั้งหมด</code>
+                                <span className="text-xs text-slate-600">ยิ่งมากยิ่งดี (งาน/หน่วยเวลา)</span>
+                            </div>
+                            <div className="bg-white p-3 rounded border border-slate-300">
+                                <Term word="CPU Utilization"><strong className="text-red-600 block mb-1">CPU Utilization</strong></Term>
+                                <code className="font-mono text-slate-900 block bg-slate-100 rounded px-2 py-1">Utilization = เวลา CPU ยุ่ง ÷ เวลาทั้งหมด × 100%</code>
+                                <span className="text-xs text-slate-600">ช่วง Context Switch = CPU ไม่ยุ่ง → ตัวนี้ลดลง</span>
+                            </div>
+                        </div>
+                        <p className="mt-3 text-xs text-slate-600"><i className="fa-solid fa-lightbulb text-amber-600"></i> <strong>ลำดับการคิดทุกข้อ:</strong> ① วาด Gantt หา CT ของทุกตัว → ② TAT = CT − AT → ③ WT = TAT − BT → ④ หารเฉลี่ย — อย่าข้ามไปคำนวณ WT ตรง ๆ เดี๋ยวพลาด</p>
                     </div>
 
                     <div className="bg-slate-50 p-5 rounded-xl border border-yellow-300">
@@ -1543,11 +1590,47 @@ int main() {
                                         <br/>WT: 0, 6, 14, 21 → <strong className="text-red-600">เฉลี่ย 10.25</strong>
                                     </div>
                                     <div className="bg-white p-4 rounded border border-slate-300">
-                                        <strong className="text-green-300 block mb-1">SJF (สั้นสุดก่อน)</strong>
+                                        <strong className="text-green-600 block mb-1">SJF (สั้นสุดก่อน)</strong>
                                         Gantt: P4(3) → P1(6) → P3(7) → P2(8)
                                         <br/>เสร็จที่: 3, 9, 16, 24
                                         <br/>TAT: 3, 9, 16, 24 → เฉลี่ย 13
                                         <br/>WT: 0, 3, 9, 16 → <strong className="text-emerald-600">เฉลี่ย 7 (ดีกว่า FCFS)</strong>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                                    <div className="overflow-x-auto">
+                                        <p className="font-bold text-blue-600 text-xs mb-1">ตารางคำนวณ FCFS (วิธีทำเต็ม ๆ):</p>
+                                        <table className="w-full text-xs border border-slate-300 rounded-lg overflow-hidden">
+                                            <thead className="bg-slate-100 text-slate-800">
+                                                <tr>
+                                                    <th className="p-1.5 text-left">งาน</th><th className="p-1.5">AT</th><th className="p-1.5">BT</th><th className="p-1.5">CT</th><th className="p-1.5">TAT = CT−AT</th><th className="p-1.5">WT = TAT−BT</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="text-slate-700">
+                                                <tr className="border-t border-slate-300"><td className="p-1.5 font-bold">P1</td><td className="p-1.5 text-center">0</td><td className="p-1.5 text-center">6</td><td className="p-1.5 text-center">6</td><td className="p-1.5 text-center">6 − 0 = 6</td><td className="p-1.5 text-center">6 − 6 = 0</td></tr>
+                                                <tr className="border-t border-slate-300"><td className="p-1.5 font-bold">P2</td><td className="p-1.5 text-center">0</td><td className="p-1.5 text-center">8</td><td className="p-1.5 text-center">14</td><td className="p-1.5 text-center">14 − 0 = 14</td><td className="p-1.5 text-center">14 − 8 = 6</td></tr>
+                                                <tr className="border-t border-slate-300"><td className="p-1.5 font-bold">P3</td><td className="p-1.5 text-center">0</td><td className="p-1.5 text-center">7</td><td className="p-1.5 text-center">21</td><td className="p-1.5 text-center">21 − 0 = 21</td><td className="p-1.5 text-center">21 − 7 = 14</td></tr>
+                                                <tr className="border-t border-slate-300"><td className="p-1.5 font-bold">P4</td><td className="p-1.5 text-center">0</td><td className="p-1.5 text-center">3</td><td className="p-1.5 text-center">24</td><td className="p-1.5 text-center">24 − 0 = 24</td><td className="p-1.5 text-center">24 − 3 = 21</td></tr>
+                                                <tr className="border-t border-slate-300 bg-slate-100 font-bold"><td className="p-1.5">เฉลี่ย</td><td className="p-1.5"></td><td className="p-1.5"></td><td className="p-1.5"></td><td className="p-1.5 text-center text-red-600">(6+14+21+24)/4 = 16.25</td><td className="p-1.5 text-center text-red-600">(0+6+14+21)/4 = 10.25</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <p className="font-bold text-green-600 text-xs mb-1">ตารางคำนวณ SJF (วิธีทำเต็ม ๆ):</p>
+                                        <table className="w-full text-xs border border-slate-300 rounded-lg overflow-hidden">
+                                            <thead className="bg-slate-100 text-slate-800">
+                                                <tr>
+                                                    <th className="p-1.5 text-left">งาน</th><th className="p-1.5">AT</th><th className="p-1.5">BT</th><th className="p-1.5">CT</th><th className="p-1.5">TAT = CT−AT</th><th className="p-1.5">WT = TAT−BT</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="text-slate-700">
+                                                <tr className="border-t border-slate-300"><td className="p-1.5 font-bold">P4</td><td className="p-1.5 text-center">0</td><td className="p-1.5 text-center">3</td><td className="p-1.5 text-center">3</td><td className="p-1.5 text-center">3 − 0 = 3</td><td className="p-1.5 text-center">3 − 3 = 0</td></tr>
+                                                <tr className="border-t border-slate-300"><td className="p-1.5 font-bold">P1</td><td className="p-1.5 text-center">0</td><td className="p-1.5 text-center">6</td><td className="p-1.5 text-center">9</td><td className="p-1.5 text-center">9 − 0 = 9</td><td className="p-1.5 text-center">9 − 6 = 3</td></tr>
+                                                <tr className="border-t border-slate-300"><td className="p-1.5 font-bold">P3</td><td className="p-1.5 text-center">0</td><td className="p-1.5 text-center">7</td><td className="p-1.5 text-center">16</td><td className="p-1.5 text-center">16 − 0 = 16</td><td className="p-1.5 text-center">16 − 7 = 9</td></tr>
+                                                <tr className="border-t border-slate-300"><td className="p-1.5 font-bold">P2</td><td className="p-1.5 text-center">0</td><td className="p-1.5 text-center">8</td><td className="p-1.5 text-center">24</td><td className="p-1.5 text-center">24 − 0 = 24</td><td className="p-1.5 text-center">24 − 8 = 16</td></tr>
+                                                <tr className="border-t border-slate-300 bg-slate-100 font-bold"><td className="p-1.5">เฉลี่ย</td><td className="p-1.5"></td><td className="p-1.5"></td><td className="p-1.5"></td><td className="p-1.5 text-center text-emerald-600">(3+9+16+24)/4 = 13</td><td className="p-1.5 text-center text-emerald-600">(0+3+9+16)/4 = 7</td></tr>
+                                            </tbody>
+                                        </table>
                                     </div>
                                 </div>
                                 <p className="font-bold text-slate-900 mt-2 mb-1"><Term word="Gantt Chart">Gantt Chart</Term> เทียบกัน:</p>
@@ -1581,8 +1664,25 @@ int main() {
                                 <ul className="list-disc ml-6 space-y-1">
                                     <li>TAT: P1 = 30, P2 = 7, P3 = 10 → เฉลี่ย 15.67</li>
                                     <li>WT = TAT − Burst: P1 = 6, P2 = 4, P3 = 7 → เฉลี่ย 5.67</li>
+                                    <li>Response Time: P1 = 0, P2 = 4, P3 = 7 — งานสั้นตอบสนองไว (จุดเด่นของ RR)</li>
                                     <li><span className="text-amber-600">ข้อสังเกต:</span> RR ช่วยให้งานสั้นเสร็จเร็ว (Response ดี) แต่งานยาวถูกยืดออก</li>
                                 </ul>
+                                <div className="overflow-x-auto mt-3">
+                                    <p className="font-bold text-blue-600 text-xs mb-1">ตารางคำนวณ RR (q=4) — วิธีทำเต็ม ๆ:</p>
+                                    <table className="w-full text-xs border border-slate-300 rounded-lg overflow-hidden">
+                                        <thead className="bg-slate-100 text-slate-800">
+                                            <tr>
+                                                <th className="p-1.5 text-left">งาน</th><th className="p-1.5">AT</th><th className="p-1.5">BT</th><th className="p-1.5">CT</th><th className="p-1.5">TAT = CT−AT</th><th className="p-1.5">WT = TAT−BT</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="text-slate-700">
+                                            <tr className="border-t border-slate-300"><td className="p-1.5 font-bold">P1</td><td className="p-1.5 text-center">0</td><td className="p-1.5 text-center">24</td><td className="p-1.5 text-center">30</td><td className="p-1.5 text-center">30 − 0 = 30</td><td className="p-1.5 text-center">30 − 24 = 6</td></tr>
+                                            <tr className="border-t border-slate-300"><td className="p-1.5 font-bold">P2</td><td className="p-1.5 text-center">0</td><td className="p-1.5 text-center">3</td><td className="p-1.5 text-center">7</td><td className="p-1.5 text-center">7 − 0 = 7</td><td className="p-1.5 text-center">7 − 3 = 4</td></tr>
+                                            <tr className="border-t border-slate-300"><td className="p-1.5 font-bold">P3</td><td className="p-1.5 text-center">0</td><td className="p-1.5 text-center">3</td><td className="p-1.5 text-center">10</td><td className="p-1.5 text-center">10 − 0 = 10</td><td className="p-1.5 text-center">10 − 3 = 7</td></tr>
+                                            <tr className="border-t border-slate-300 bg-slate-100 font-bold"><td className="p-1.5">เฉลี่ย</td><td className="p-1.5"></td><td className="p-1.5"></td><td className="p-1.5"></td><td className="p-1.5 text-center">(30+7+10)/3 = 15.67</td><td className="p-1.5 text-center">(6+4+7)/3 = 5.67</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
                                 <Gantt
                                     segments={[
                                         { label: 'P1', start: 0, end: 4, color: '#2563eb' },
@@ -1616,6 +1716,23 @@ int main() {
                                     <li>WT: 9, 0, 15, 2 → เฉลี่ย 6.5</li>
                                     <li><span className="text-red-600">ระวัง!</span> หลายคนลืมว่า SRTF ต้องตัดสินใจใหม่ทุกครั้งที่มีงานใหม่ "มาถึง" ไม่ใช่เฉพาะตอนรันเสร็จ</li>
                                 </ul>
+                                <div className="overflow-x-auto mt-3">
+                                    <p className="font-bold text-purple-600 text-xs mb-1">ตารางคำนวณ SRTF — วิธีทำเต็ม ๆ (อย่าลืมว่า AT ไม่เท่ากัน!):</p>
+                                    <table className="w-full text-xs border border-slate-300 rounded-lg overflow-hidden">
+                                        <thead className="bg-slate-100 text-slate-800">
+                                            <tr>
+                                                <th className="p-1.5 text-left">งาน</th><th className="p-1.5">AT</th><th className="p-1.5">BT</th><th className="p-1.5">CT</th><th className="p-1.5">TAT = CT−AT</th><th className="p-1.5">WT = TAT−BT</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="text-slate-700">
+                                            <tr className="border-t border-slate-300"><td className="p-1.5 font-bold">P1</td><td className="p-1.5 text-center">0</td><td className="p-1.5 text-center">8</td><td className="p-1.5 text-center">17</td><td className="p-1.5 text-center">17 − 0 = 17</td><td className="p-1.5 text-center">17 − 8 = 9</td></tr>
+                                            <tr className="border-t border-slate-300"><td className="p-1.5 font-bold">P2</td><td className="p-1.5 text-center">1</td><td className="p-1.5 text-center">4</td><td className="p-1.5 text-center">5</td><td className="p-1.5 text-center">5 − 1 = 4</td><td className="p-1.5 text-center">4 − 4 = 0</td></tr>
+                                            <tr className="border-t border-slate-300"><td className="p-1.5 font-bold">P3</td><td className="p-1.5 text-center">2</td><td className="p-1.5 text-center">9</td><td className="p-1.5 text-center">26</td><td className="p-1.5 text-center">26 − 2 = 24</td><td className="p-1.5 text-center">24 − 9 = 15</td></tr>
+                                            <tr className="border-t border-slate-300"><td className="p-1.5 font-bold">P4</td><td className="p-1.5 text-center">3</td><td className="p-1.5 text-center">5</td><td className="p-1.5 text-center">10</td><td className="p-1.5 text-center">10 − 3 = 7</td><td className="p-1.5 text-center">7 − 5 = 2</td></tr>
+                                            <tr className="border-t border-slate-300 bg-slate-100 font-bold"><td className="p-1.5">เฉลี่ย</td><td className="p-1.5"></td><td className="p-1.5"></td><td className="p-1.5"></td><td className="p-1.5 text-center">(17+4+24+7)/4 = 13</td><td className="p-1.5 text-center">(9+0+15+2)/4 = 6.5</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
                                 <Gantt
                                     segments={[
                                         { label: 'P1', start: 0, end: 1, color: '#2563eb' },
@@ -1700,202 +1817,257 @@ int main() {
             )
         };
 
-        // --- Interactive Animation Component ---
-        const ProcessAnimation = () => {
-            const [step, setStep] = useState(0);
-
-            const steps = [
-                {
-                    title: "1. เริ่มต้น (Before Fork)",
-                    desc: "มีแค่โปรแกรมหลัก (Parent, PID 100) รันอยู่ตัวเดียว ตัวแปร x = 10",
-                    parentState: "Running", childState: null,
-                    arrow: null,
-                    pCodeHighlight: 0,
-                    pText: "Parent (PID=100)\nCode: main()\nVars: x = 10",
-                    cText: null
-                },
-                {
-                    title: "2. สร้างลูก (Fork)",
-                    desc: "Parent เรียก fork() → ระบบก๊อปปี้ทุกอย่างสร้าง Child (PID 101) Memory แยกกันเด็ดขาด! แม่ได้คืน 101 ลูกได้คืน 0",
-                    parentState: "Running", childState: "Ready",
-                    arrow: "fork() สร้างลูก\nคืน 101 ให้แม่ / คืน 0 ให้ลูก",
-                    pCodeHighlight: 1,
-                    pText: "Parent (PID=100)\nCode: main()\nVars: x = 10\npid = 101",
-                    cText: "Child (PID=101)\nCode: main()\nVars: x = 10\npid = 0"
-                },
-                {
-                    title: "3. ลูกแปลงร่าง (Exec)",
-                    desc: "ลูกเห็น pid == 0 จึงเรียก exec() — โปรแกรมเดิมถูกล้าง กลายเป็น /bin/ls (PID เดิม) แม่เริ่ม wait() รอ",
-                    parentState: "Waiting", childState: "Running (Exec)",
-                    arrow: "exec() แปลงร่าง\n→ /bin/ls",
-                    pCodeHighlight: 8,
-                    pText: "Parent (PID=100)\nStatus: Blocked\nwait(&status)...",
-                    cText: "Child (PID=101)\n[TRANSFORMED!]\nCode: /bin/ls\nExecuting..."
-                },
-                {
-                    title: "4. ลูกจบ → Zombie",
-                    desc: "ls เสร็จ ลูกเรียก exit() — ร่างตาย แต่ PCB ยังค้างอยู่จนกว่าแม่จะ wait() มารับสถานะ",
-                    parentState: "Waiting", childState: "Zombie",
-                    arrow: "exit() ลูกตาย\nแต่ PCB ยังค้าง (Zombie)",
-                    pCodeHighlight: 8,
-                    pText: "Parent (PID=100)\nStatus: Blocked\nwait(&status)...",
-                    cText: "☠️ Zombie (PID=101)\nตายแล้ว แต่ PCB ค้าง\nStatus code: 0"
-                },
-                {
-                    title: "5. แม่เก็บศพ (Wait returns)",
-                    desc: "wait() รับสถานะของลูก → ระบบกำจัด Zombie ทิ้ง แม่กลับมารันต่อได้",
-                    parentState: "Running", childState: null,
-                    arrow: "wait() เก็บสถานะ\n→ กำจัด Zombie",
-                    pCodeHighlight: 9,
-                    pText: "Parent (PID=100)\nwait() returns 101\nทำงานต่อได้แล้ว ✓",
-                    cText: null
-                }
-            ];
-
-            const current = steps[step];
-
-            const stateBadge = (state) => {
-                if (!state) return null;
-                const map = {
-                    'Running': 'bg-green-100 text-green-700 border-green-400',
-                    'Ready': 'bg-blue-100 text-blue-700 border-blue-400',
-                    'Waiting': 'bg-amber-100 text-amber-700 border-amber-400',
-                    'Zombie': 'bg-red-100 text-red-700 border-red-400',
-                    'Running (Exec)': 'bg-purple-100 text-purple-700 border-purple-400'
-                };
-                return <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full border ${map[state] || 'bg-slate-100 text-slate-600 border-slate-300'}`}>{state}</span>;
-            };
-
-            const codeSnippet = `int x = 10;
-pid_t pid = fork();
-
-if (pid == 0) { 
-    // โค้ดของลูก
-    execlp("/bin/ls", "ls", NULL);
-    exit(0); // โค้ดนี้จะไม่ถูกรันถ้า exec สำเร็จ
-} 
-else if (pid > 0) { 
-    // โค้ดของแม่
-    wait(NULL); 
-    printf("Child Complete\\n");
-}`;
-
+        // --- Process Tree Tutor: วาดต้นไม้ Process + ไล่โค้ดทีละบรรทัด ---
+        const ProcessTreeTutor = () => {
             return (
                 <div className="space-y-6 animate-fade-in">
                     <h2 className="text-3xl font-black text-blue-600 border-b border-slate-300 pb-2 flex items-center">
-                        <i className="fa-solid fa-film mr-3"></i> Step-by-Step Animation: The Process Lifecycle
+                        <i className="fa-solid fa-tree mr-3"></i> วาดต้นไม้ Process + ไล่โค้ดทีละบรรทัด
                     </h2>
-                    
-                    <div className="no-print flex flex-col lg:flex-row gap-6">
-                        {/* Code Panel */}
-                        <div className="lg:w-1/3">
-                            <div className="bg-white border border-slate-300 rounded-xl overflow-hidden shadow-xl">
-                                <div className="bg-slate-50 px-4 py-2 border-b border-slate-300 font-mono text-sm text-slate-700">fork_exec_wait.c</div>
-                                <div className="p-4 font-mono text-xs text-slate-600 whitespace-pre-wrap leading-loose">
-                                    {codeSnippet.split('\n').map((line, i) => {
-                                        // Simple highlight matcher based on current step
-                                        let isHighlight = false;
-                                        if (step === 0 && i === 0) isHighlight = true;
-                                        if (step === 1 && i === 1) isHighlight = true;
-                                        if (step === 2 && i === 5) isHighlight = true;
-                                        if (step === 3 && i === 6) isHighlight = true;
-                                        if (step === 4 && i >= 9) isHighlight = true;
+                    <p className="text-slate-700">เทคนิคเดียวที่ใช้ทำโจทย์ไล่โค้ด fork() ได้ทุกข้อ: วาด <strong>"ต้นไม้ Process"</strong> ทีละ fork แล้วไล่บรรทัดต่อบรรทัด ไล่จากง่ายไปยาก 8 ตัวอย่าง</p>
 
-                                        return (
-                                            <div key={i} className={`px-2 rounded ${isHighlight ? 'bg-blue-100 border-l-2 border-blue-600 text-slate-900' : ''}`}>
-                                                {line}
-                                {step === 4 && (
-                                    <div className="z-10 w-48 rounded-lg p-4 border-2 border-dashed border-slate-300 bg-slate-100/60 text-center">
-                                        <div className="text-slate-600 font-bold text-sm mb-1"><i className="fa-solid fa-trash-can"></i> Zombie ถูกกำจัดแล้ว</div>
-                                        <div className="text-xs text-slate-600 font-mono">PCB ถูกเก็บคืนระบบ<br/>ไม่มี PID 101 อีกต่อไป</div>
-                                    </div>
-                                )}
-                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        </div>
+                    <div className="bg-slate-50 p-5 rounded-xl border border-emerald-300">
+                        <h3 className="text-xl font-bold text-emerald-600 mb-3"><i className="fa-solid fa-list-check mr-2"></i> วิธีวาดต้นไม้ — 5 กฎจำได้ ไล่โจทย์ได้หมด</h3>
+                        <ol className="list-decimal ml-6 space-y-2 text-sm text-slate-700">
+                            <li><strong className="text-slate-900">เริ่มจากกล่องเดียว</strong> — Process แรกก่อนถึง fork ตัวแรก</li>
+                            <li><strong className="text-slate-900">ทุกครั้งที่เจอ fork() ให้ "แยก 2"</strong> — ทุกกล่องที่มีอยู่ตอนนั้นกลายเป็น 2 กล่อง (ซ้าย = แม่, ขวา = ลูก) นี่คือที่มาของกฎ fork n ครั้ง = 2<sup>n</sup> process</li>
+                            <li><strong className="text-slate-900">เขียนค่า pid ที่แต่ละตัวได้</strong> — แม่ได้ &gt; 0 (PID ของลูก), ลูกได้ 0</li>
+                            <li><strong className="text-slate-900">ไล่โค้ดต่อทีละบรรทัดในแต่ละกล่องแยกกัน</strong> — จดว่ากล่องไหนพิมพ์อะไร (ถ้าโจทย์ถาม output)</li>
+                            <li><strong className="text-slate-900">จำจุดหลอก 3 อย่าง</strong>: (1) ลำดับการพิมพ์ระหว่าง process <u>สลับกันได้</u> ถ้าไม่มี wait() (2) ตัวแปรของแต่ละกล่องแยกกัน แก้ไม่กระทบกัน (3) fork ในลูป = คูณ 2 ทุกรอบ ไม่ใช่บวก</li>
+                        </ol>
+                    </div>
 
-                        {/* Animation Panel */}
-                        <div className="lg:w-2/3 bg-white rounded-xl border border-slate-300 p-6 shadow-xl flex flex-col relative overflow-hidden">
-                            <div className="text-center mb-5">
-                                <div className="no-print flex flex-wrap justify-center gap-2 mb-4">
-                                    {steps.map((st, i) => (
-                                        <button key={i} onClick={() => setStep(i)}
-                                            className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${i === step ? 'bg-blue-600 text-slate-900 border-blue-600 shadow' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}>
-                                            {st.title}
-                                        </button>
-                                    ))}
-                                </div>
-                                <h3 className="text-xl font-bold text-slate-900 mb-2">{current.title}</h3>
-                                <p className="text-slate-600 text-sm min-h-[40px] max-w-xl mx-auto">{current.desc}</p>
-                            </div>
-
-                            <div className="flex-1 flex justify-center items-center gap-8 relative min-h-[260px]">
-                                {/* Parent Box */}
-                                <div className="process-box z-10 w-48 bg-slate-50 border-2 border-blue-500 rounded-lg p-4 shadow-lg shadow-blue-500/20">
-                                    <div className="text-center font-black text-blue-600 border-b border-slate-300 pb-2 mb-2"><i className="fa-solid fa-user-tie"></i> Parent Process</div>
-                                    <div className="text-center mb-2">{stateBadge(current.parentState)}</div>
-                                    <div className="font-mono text-xs whitespace-pre-wrap text-slate-700">{current.pText}</div>
-                                </div>
-
-                                {/* Action Arrow */}
-                                {current.arrow && (
-                                    <div className="z-20 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-1 pointer-events-none">
-                                        <div className="text-[11px] font-bold text-blue-600 bg-white px-3 py-1 rounded-lg border border-blue-300 shadow-md whitespace-pre-wrap text-center max-w-[220px]">{current.arrow}</div>
-                                        <i className="fa-solid fa-arrow-right-long text-3xl text-blue-500"></i>
-                                    </div>
-                                )}
-
-                                {/* Child Box */}
-                                {current.cText && (
-                                    <div className={`process-box z-10 w-48 rounded-lg p-4 shadow-lg 
-                                        ${step === 2 ? 'exec-state text-slate-900' : 'bg-slate-50 border-2 border-green-500 shadow-green-500/20 text-slate-700'}
-                                        ${step === 3 ? 'zombie-state' : ''}
-                                    `}>
-                                        <div className={`text-center font-black pb-2 mb-2 border-b ${step===2 ? 'border-white/30':'border-slate-300 text-green-600'}`}>
-                                            {step === 3 ? <i className="fa-solid fa-skull"></i> : <i className="fa-solid fa-child"></i>} Child Process
-                                        </div>
-                                        <div className="text-center mb-2">{stateBadge(current.childState)}</div>
-                                        <div className="font-mono text-xs whitespace-pre-wrap">{current.cText}</div>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Controls */}
-                            <div className="no-print mt-8 flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-300">
-                                <button onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0} className="px-4 py-2 bg-slate-300 hover:bg-slate-200 text-slate-900 rounded disabled:opacity-50 text-sm font-bold transition">
-                                    <i className="fa-solid fa-chevron-left mr-2"></i> ก่อนหน้า
-                                </button>
-                                <div className="flex gap-2">
-                                    {steps.map((_, i) => (
-                                        <div key={i} className={`w-3 h-3 rounded-full ${i === step ? 'bg-blue-500' : 'bg-slate-600'}`}></div>
-                                    ))}
-                                </div>
-                                <button onClick={() => setStep(Math.min(steps.length - 1, step + 1))} disabled={step === steps.length - 1} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-slate-900 rounded disabled:opacity-50 text-sm font-bold transition">
-                                    ถัดไป <i className="fa-solid fa-chevron-right ml-2"></i>
-                                </button>
-                            </div>
+                    <div className="bg-slate-50 p-5 rounded-xl border border-slate-300">
+                        <h3 className="text-xl font-bold text-blue-600 mb-2">ตัวอย่าง 1: fork() 1 ครั้ง — ต้นไม้แค่ 2 กิ่ง</h3>
+                        <CodeBlock language="c" code={`printf("Start\\n");
+fork();
+printf("Hello\\n");`} />
+                        <Diagram title="วาดต้นไม้: 1 กล่อง → fork → 2 กล่อง" w={680} h={210}>
+                            <DBox x={270} y={20} w={140} h={50} title="P0 (ตัวเดียว)" sub="ก่อนถึง fork()" stroke="#64748b" />
+                            <DArrow x1={340} y1={72} x2={340} y2={100} color="#64748b" />
+                            <DArrow x1={340} y1={100} x2={175} y2={100} color="#2563eb" />
+                            <DArrow x1={340} y1={100} x2={505} y2={100} color="#16a34a" />
+                            <DArrow x1={175} y1={100} x2={175} y2={128} color="#2563eb" />
+                            <DArrow x1={505} y1={100} x2={505} y2={128} color="#16a34a" />
+                            <text x={340} y={92} textAnchor="middle" fill="#2563eb" fontSize="11" fontWeight="bold">fork()</text>
+                            <DBox x={55} y={135} w={240} h={55} title="แม่ P0 — ได้ pid > 0" sub="ไล่บรรทัดถัดไป → พิมพ์ Hello" stroke="#2563eb" />
+                            <DBox x={385} y={135} w={240} h={55} title="ลูก P1 — ได้ pid = 0" sub="ไล่บรรทัดถัดไป → พิมพ์ Hello" stroke="#16a34a" />
+                        </Diagram>
+                        <div className="bg-white p-4 rounded border border-slate-300 text-sm text-slate-700 mt-3">
+                            <strong className="text-slate-900">ผลลัพธ์:</strong> Start 1 ครั้ง แล้ว Hello 2 ครั้ง
+                            <ol className="list-decimal ml-6 mt-2 space-y-1">
+                                <li>P0 รัน printf("Start") — ตอนนั้นยังมีแค่ตัวเดียว → Start พิมพ์ 1 ครั้ง</li>
+                                <li>P0 เรียก fork() → กลายเป็น 2 ตัว (P0 และ P1)</li>
+                                <li>ทั้งคู่รันบรรทัดถัดไปของตัวเอง → Hello พิมพ์ 2 ครั้ง (สองบรรทัดสุดท้ายสลับกันได้)</li>
+                            </ol>
                         </div>
                     </div>
 
-                    {/* Print-only: ทุก Step พร้อมกัน */}
-                    <div className="print-only mt-8">
-                        <h2 className="text-2xl font-black text-blue-600 border-b border-slate-300 pb-2 mb-4">สรุปทุก Step ของ Process Lifecycle (ฉบับปริ้นท์)</h2>
-                        <CodeBlock language="c" code={codeSnippet} />
-                        {steps.map((st, i) => (
-                            <div key={i} className="mb-4 p-4 rounded-xl border border-slate-300 bg-white">
-                                <h3 className="font-bold text-blue-600">Step {i + 1}: {st.title}</h3>
-                                <p className="text-sm text-slate-700 mt-1">{st.desc}</p>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                                    <div className="bg-slate-50 border border-blue-300 rounded-lg p-3 whitespace-pre-wrap text-xs font-mono text-slate-700">{st.pText}</div>
-                                    {st.cText && (
-                                        <div className={`bg-slate-50 border ${st.cText.includes('Zombie') ? 'border-red-300' : 'border-green-300'} rounded-lg p-3 whitespace-pre-wrap text-xs font-mono text-slate-700`}>{st.cText}</div>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
+                    <div className="bg-slate-50 p-5 rounded-xl border border-slate-300">
+                        <h3 className="text-xl font-bold text-blue-600 mb-2">ตัวอย่าง 2 & 3: fork() 2 ครั้ง กับ fork ในลูป — ต้นไม้เดียวกัน!</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <CodeBlock language="c" code={`fork();
+fork();
+printf("X\\n");`} />
+                            <CodeBlock language="c" code={`for (int i = 0; i < 2; i++) {
+    fork();
+}
+printf("X\\n");`} />
+                        </div>
+                        <p className="text-sm text-slate-700 mb-2">ทั้งสองแบบให้ผลเหมือนกัน เพราะ <strong>fork ครั้งที่ 2 เกิดจากทุกตัวที่รอดมา</strong> — อย่าคิดว่า loop ได้ 3 ตัว!</p>
+                        <Diagram title="ต้นไม้ 4 ตัว (2^2) — วาดทีละชั้น" w={720} h={300}>
+                            <DBox x={300} y={15} w={120} h={45} title="P0" stroke="#64748b" />
+                            <DArrow x1={360} y1={62} x2={360} y2={85} color="#64748b" />
+                            <DArrow x1={360} y1={85} x2={195} y2={85} color="#2563eb" />
+                            <DArrow x1={360} y1={85} x2={525} y2={85} color="#16a34a" />
+                            <DArrow x1={195} y1={85} x2={195} y2={113} color="#2563eb" />
+                            <DArrow x1={525} y1={85} x2={525} y2={113} color="#16a34a" />
+                            <text x={360} y={78} textAnchor="middle" fill="#2563eb" fontSize="10.5" fontWeight="bold">fork ครั้งที่ 1</text>
+                            <DBox x={75} y={120} w={240} h={50} title="แม่ P0" sub="ได้ pid > 0" stroke="#2563eb" />
+                            <DBox x={405} y={120} w={240} h={50} title="ลูก P1" sub="ได้ pid = 0" stroke="#16a34a" />
+                            <DArrow x1={195} y1={172} x2={195} y2={195} color="#64748b" />
+                            <DArrow x1={195} y1={195} x2={95} y2={195} color="#2563eb" />
+                            <DArrow x1={195} y1={195} x2={295} y2={195} color="#16a34a" />
+                            <DArrow x1={95} y1={195} x2={95} y2={223} color="#2563eb" />
+                            <DArrow x1={295} y1={195} x2={295} y2={223} color="#16a34a" />
+                            <DArrow x1={525} y1={172} x2={525} y2={195} color="#64748b" />
+                            <DArrow x1={525} y1={195} x2={425} y2={195} color="#2563eb" />
+                            <DArrow x1={525} y1={195} x2={625} y2={195} color="#16a34a" />
+                            <DArrow x1={425} y1={195} x2={425} y2={223} color="#2563eb" />
+                            <DArrow x1={625} y1={195} x2={625} y2={223} color="#16a34a" />
+                            <text x={195} y={190} textAnchor="middle" fill="#2563eb" fontSize="10" fontWeight="bold">fork ครั้งที่ 2</text>
+                            <text x={525} y={190} textAnchor="middle" fill="#2563eb" fontSize="10" fontWeight="bold">fork ครั้งที่ 2</text>
+                            <DBox x={25} y={230} w={140} h={55} title="P0" sub="พิมพ์ X" stroke="#2563eb" />
+                            <DBox x={225} y={230} w={140} h={55} title="P2" sub="พิมพ์ X" stroke="#16a34a" />
+                            <DBox x={425} y={230} w={140} h={55} title="P1" sub="พิมพ์ X" stroke="#2563eb" />
+                            <DBox x={605} y={230} w={90} h={55} title="P3" sub="พิมพ์ X" stroke="#16a34a" />
+                        </Diagram>
+                        <div className="bg-white p-4 rounded border border-slate-300 text-sm text-slate-700 mt-3">
+                            <strong className="text-slate-900">ผลลัพธ์:</strong> X พิมพ์ 4 ครั้ง (ลำดับสลับกันได้หมด)
+                            <ol className="list-decimal ml-6 mt-2 space-y-1">
+                                <li>fork แรก: P0 → P0 + P1 (2 ตัว)</li>
+                                <li>fork ที่สอง: <strong>ทั้ง P0 และ P1</strong> ต่างก็รัน fork ของตัวเอง → 4 ตัว</li>
+                                <li>ทั้ง 4 ตัวพิมพ์ X → 4 บรรทัด</li>
+                            </ol>
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-50 p-5 rounded-xl border border-slate-300">
+                        <h3 className="text-xl font-bold text-blue-600 mb-2">ตัวอย่าง 4: if/else แยกทางแม่ลูก — ใครพิมพ์อะไร?</h3>
+                        <CodeBlock language="c" code={`pid_t pid = fork();
+
+if (pid == 0)  printf("ลูก\\n");
+else           printf("แม่\\n");`} />
+                        <Diagram title="แม่กับลูกเดินคนละ branch" w={680} h={210}>
+                            <DBox x={270} y={20} w={140} h={50} title="P0" sub="pid = fork()" stroke="#64748b" />
+                            <DArrow x1={340} y1={72} x2={340} y2={100} color="#64748b" />
+                            <DArrow x1={340} y1={100} x2={175} y2={100} color="#2563eb" />
+                            <DArrow x1={340} y1={100} x2={505} y2={100} color="#16a34a" />
+                            <DArrow x1={175} y1={100} x2={175} y2={128} color="#2563eb" />
+                            <DArrow x1={505} y1={100} x2={505} y2={128} color="#16a34a" />
+                            <text x={340} y={92} textAnchor="middle" fill="#2563eb" fontSize="11" fontWeight="bold">fork()</text>
+                            <DBox x={55} y={135} w={240} h={60} title="แม่ P0 — pid > 0" sub="เข้า else → พิมพ์ แม่" stroke="#2563eb" />
+                            <DBox x={385} y={135} w={240} h={60} title="ลูก P1 — pid == 0" sub="เข้า if → พิมพ์ ลูก" stroke="#16a34a" />
+                        </Diagram>
+                        <div className="bg-white p-4 rounded border border-slate-300 text-sm text-slate-700 mt-3">
+                            <strong className="text-slate-900">ผลลัพธ์:</strong> พิมพ์ "ลูก" 1 ครั้ง และ "แม่" 1 ครั้ง (2 บรรทัด ใครก่อนก็ได้)
+                            <p className="mt-2"><span className="text-red-600 font-bold">จุดหลอก:</span> โจทย์บางข้อเขียน if/else สลับเงื่อนไข (เช่น if (pid &gt; 0) ของแม่ก่อน) — อย่าจำว่า "ลูกอยู่ if" แต่ให้ดูเงื่อนไขจริง ๆ ทีละตัว</p>
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-50 p-5 rounded-xl border border-slate-300">
+                        <h3 className="text-xl font-bold text-blue-600 mb-2">ตัวอย่าง 5: fork() 3 ครั้ง — ต้นไม้ 8 ตัว (2^3)</h3>
+                        <CodeBlock language="c" code={`fork();
+fork();
+fork();
+printf("P\\n");`} />
+                        <Diagram title="3 ชั้น → 8 ใบ: 2 → 4 → 8" w={720} h={250}>
+                            <DBox x={310} y={15} w={100} h={40} title="P0" stroke="#64748b" />
+                            <DArrow x1={360} y1={57} x2={360} y2={80} color="#64748b" />
+                            <DArrow x1={360} y1={80} x2={200} y2={80} color="#2563eb" />
+                            <DArrow x1={360} y1={80} x2={520} y2={80} color="#16a34a" />
+                            <DArrow x1={200} y1={80} x2={200} y2={103} color="#2563eb" />
+                            <DArrow x1={520} y1={80} x2={520} y2={103} color="#16a34a" />
+                            <text x={360} y={73} textAnchor="middle" fill="#2563eb" fontSize="10" fontWeight="bold">fork 1</text>
+                            <DBox x={130} y={110} w={140} h={40} title="P0" stroke="#2563eb" />
+                            <DBox x={450} y={110} w={140} h={40} title="P1" stroke="#16a34a" />
+                            <DArrow x1={200} y1={152} x2={200} y2={175} color="#64748b" />
+                            <DArrow x1={200} y1={175} x2={130} y2={175} color="#2563eb" />
+                            <DArrow x1={200} y1={175} x2={270} y2={175} color="#16a34a" />
+                            <DArrow x1={130} y1={175} x2={130} y2={198} color="#2563eb" />
+                            <DArrow x1={270} y1={175} x2={270} y2={198} color="#16a34a" />
+                            <DArrow x1={520} y1={152} x2={520} y2={175} color="#64748b" />
+                            <DArrow x1={520} y1={175} x2={450} y2={175} color="#2563eb" />
+                            <DArrow x1={520} y1={175} x2={590} y2={175} color="#16a34a" />
+                            <DArrow x1={450} y1={175} x2={450} y2={198} color="#2563eb" />
+                            <DArrow x1={590} y1={175} x2={590} y2={198} color="#16a34a" />
+                            <text x={200} y={170} textAnchor="middle" fill="#2563eb" fontSize="10" fontWeight="bold">fork 2</text>
+                            <text x={520} y={170} textAnchor="middle" fill="#2563eb" fontSize="10" fontWeight="bold">fork 2</text>
+                            <DBox x={60} y={205} w={140} h={35} title="P0" stroke="#2563eb" />
+                            <DBox x={200} y={205} w={140} h={35} title="P2" stroke="#16a34a" />
+                            <DBox x={380} y={205} w={140} h={35} title="P1" stroke="#2563eb" />
+                            <DBox x={520} y={205} w={140} h={35} title="P3" stroke="#16a34a" />
+                            <text x={130} y={260} textAnchor="middle" fill="#64748b" fontSize="11">fork 3 → แต่ละตัวแยกเป็น 2 อีกชั้น = 8 ตัว พิมพ์ P 8 ครั้ง</text>
+                        </Diagram>
+                        <div className="bg-white p-4 rounded border border-slate-300 text-sm text-slate-700 mt-3">
+                            <strong className="text-slate-900">ผลลัพธ์:</strong> P พิมพ์ 8 ครั้ง
+                            <p className="mt-1">ชั้น 1 ได้ 2 ตัว → ชั้น 2 ได้ 4 ตัว → ชั้น 3 ได้ 8 ตัว ลองวาดต่อในกระดาษให้ครบ 8 ใบเองดูครับ</p>
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-50 p-5 rounded-xl border border-slate-300">
+                        <h3 className="text-xl font-bold text-blue-600 mb-2">ตัวอย่าง 6: ตัวแปรหลัง fork — แยกโลกกันเด็ดขาด</h3>
+                        <CodeBlock language="c" code={`int x = 5;
+if (fork() == 0) x = 10;
+printf("x = %d\\n", x);`} />
+                        <Diagram title="แต่ละกล่องมีตัวแปรของตัวเอง" w={680} h={210}>
+                            <DBox x={270} y={20} w={140} h={50} title="P0" sub="x = 5" stroke="#64748b" />
+                            <DArrow x1={340} y1={72} x2={340} y2={100} color="#64748b" />
+                            <DArrow x1={340} y1={100} x2={175} y2={100} color="#2563eb" />
+                            <DArrow x1={340} y1={100} x2={505} y2={100} color="#16a34a" />
+                            <DArrow x1={175} y1={100} x2={175} y2={128} color="#2563eb" />
+                            <DArrow x1={505} y1={100} x2={505} y2={128} color="#16a34a" />
+                            <text x={340} y={92} textAnchor="middle" fill="#2563eb" fontSize="11" fontWeight="bold">fork()</text>
+                            <DBox x={55} y={135} w={240} h={60} title="แม่ P0 — ไม่เข้า if" sub="x ยังเป็น 5 → พิมพ์ x = 5" stroke="#2563eb" />
+                            <DBox x={385} y={135} w={240} h={60} title="ลูก P1 — เข้า if (pid == 0)" sub="แก้ x = 10 → พิมพ์ x = 10" stroke="#16a34a" />
+                        </Diagram>
+                        <div className="bg-white p-4 rounded border border-slate-300 text-sm text-slate-700 mt-3">
+                            <strong className="text-slate-900">ผลลัพธ์:</strong> x = 5 และ x = 10 (ลำดับสลับได้)
+                            <p className="mt-1">ลูกแก้ x ไม่กระทบแม่ — เพราะ memory แยกกันเด็ดขาด (จริง ๆ ใช้ Copy-on-Write) นี่คือจุดหลอกยอดฮิตของข้อสอบ!</p>
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-50 p-5 rounded-xl border border-slate-300">
+                        <h3 className="text-xl font-bold text-blue-600 mb-2">ตัวอย่าง 7: ใส่ wait() — ลำดับแน่นอนทันที</h3>
+                        <CodeBlock language="c" code={`pid_t pid = fork();
+
+if (pid == 0) {
+    printf("B\\n");
+    exit(0);
+} else {
+    wait(NULL);   // แม่รอลูกจบก่อน
+    printf("A\\n");
+}`} />
+                        <Diagram title="wait() ทำให้แม่รอลูก — output เรียงได้แน่นอน" w={680} h={210}>
+                            <DBox x={55} y={135} w={240} h={60} title="แม่ P0 — pid > 0" sub="wait(NULL) → รอลูกเสร็จก่อน" stroke="#2563eb" />
+                            <DBox x={385} y={135} w={240} h={60} title="ลูก P1 — pid == 0" sub="พิมพ์ B แล้ว exit()" stroke="#16a34a" />
+                            <DArrow x1={295} y1={165} x2={380} y2={165} dashed={true} color="#a16207" />
+                            <text x={338} y={152} textAnchor="middle" fill="#a16207" fontSize="10" fontWeight="bold">wait()</text>
+                            <text x={175} y={230} textAnchor="middle" fill="#2563eb" fontSize="11" fontWeight="bold">แม่ตื่น → พิมพ์ A</text>
+                            <text x={505} y={230} textAnchor="middle" fill="#16a34a" fontSize="11" fontWeight="bold">พิมพ์ B ก่อนเสมอ</text>
+                        </Diagram>
+                        <div className="bg-white p-4 rounded border border-slate-300 text-sm text-slate-700 mt-3">
+                            <strong className="text-slate-900">ผลลัพธ์:</strong> B แล้ว A <u>เรียงแบบนี้เสมอ</u> (แม่ถูก wait บังคับให้รอ)
+                            <p className="mt-1"><span className="text-emerald-600 font-bold">สรุปจำ:</span> ไม่มี wait → ลำดับการพิมพ์ระหว่างแม่ลูกเป็นอะไรก็ได้ | มี wait → แม่พิมพ์ทีหลังลูกแน่นอน</p>
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-50 p-5 rounded-xl border border-slate-300">
+                        <h3 className="text-xl font-bold text-blue-600 mb-2">ตัวอย่าง 8: fork + exec — ลูกถูก "แปลงร่าง"</h3>
+                        <CodeBlock language="c" code={`pid_t pid = fork();
+
+if (pid == 0) {
+    execlp("/bin/echo", "echo", "hello", NULL);
+    exit(0);   // มาถึงตรงนี้ = exec พังเท่านั้น
+} else {
+    wait(NULL);
+    printf("เสร็จ\\n");
+}`} />
+                        <Diagram title="ลูกกลายเป็น echo — โค้ดเดิมของลูกหายไป" w={680} h={290}>
+                            <DBox x={270} y={20} w={140} h={50} title="P0" sub="pid = fork()" stroke="#64748b" />
+                            <DArrow x1={340} y1={72} x2={340} y2={100} color="#64748b" />
+                            <DArrow x1={340} y1={100} x2={175} y2={100} color="#2563eb" />
+                            <DArrow x1={340} y1={100} x2={505} y2={100} color="#7c3aed" />
+                            <DArrow x1={175} y1={100} x2={175} y2={128} color="#2563eb" />
+                            <DArrow x1={505} y1={100} x2={505} y2={128} color="#7c3aed" />
+                            <text x={340} y={92} textAnchor="middle" fill="#2563eb" fontSize="11" fontWeight="bold">fork()</text>
+                            <DBox x={55} y={135} w={240} h={60} title="แม่ P0 — pid > 0" sub="wait(NULL) → พิมพ์ เสร็จ" stroke="#2563eb" />
+                            <DBox x={385} y={135} w={240} h={60} title="ลูก P1 — pid == 0" sub="เรียก exec()" stroke="#7c3aed" />
+                            <DArrow x1={295} y1={165} x2={380} y2={165} dashed={true} color="#a16207" />
+                            <text x={338} y={152} textAnchor="middle" fill="#a16207" fontSize="10" fontWeight="bold">wait()</text>
+                            <DBox x={385} y={225} w={240} h={50} title="echo พิมพ์ hello แล้วจบ" sub="PID เดิม 101 — โค้ดเดิมหายไป" stroke="#16a34a" />
+                            <DArrow x1={505} y1={197} x2={505} y2={221} color="#7c3aed" />
+                            <text x={537} y={212} textAnchor="middle" fill="#7c3aed" fontSize="10" fontWeight="bold">exec()</text>
+                        </Diagram>
+                        <div className="bg-white p-4 rounded border border-slate-300 text-sm text-slate-700 mt-3">
+                            <strong className="text-slate-900">ผลลัพธ์:</strong> hello แล้ว เสร็จ
+                            <ol className="list-decimal ml-6 mt-2 space-y-1">
+                                <li>ลูกเรียก exec → ถูกแทนที่ด้วยโปรแกรม echo ทันที (PID เดิม)</li>
+                                <li>echo พิมพ์ hello แล้วจบ — โค้ดหลัง exec ในตัวลูก (exit(0)) <u>ไม่ถูกรัน</u></li>
+                                <li>แม่รอ wait จน echo จบ → พิมพ์ เสร็จ</li>
+                            </ol>
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-50 p-5 rounded-xl border border-blue-300">
+                        <h3 className="text-xl font-bold text-blue-600 mb-2"><i className="fa-solid fa-lightbulb mr-2"></i> สรุป: วิธีทำโจทย์ในห้องสอบ</h3>
+                        <ol className="list-decimal ml-6 space-y-2 text-sm text-slate-700">
+                            <li>ลากเส้นขีดคั่น "ก่อน fork" และ "หลัง fork" บนโจทย์</li>
+                            <li>วาดต้นไม้ทีละ fork — ทุกกล่องคูณ 2 (แม่ซ้าย ลูกขวา) เขียนค่า pid ลงไป</li>
+                            <li>ไล่บรรทัดต่อบรรทัด จดว่าแต่ละกล่องพิมพ์อะไร</li>
+                            <li>ถามจำนวน output → นับจากกล่อง | ถามลำดับ → เช็คว่ามี wait() ไหม | ถามค่าตัวแปร → ดูแยกทีละกล่อง</li>
+                            <li>โจทย์มี exec → กล่องนั้นถูกแทนที่ด้วยโปรแกรมใหม่ โค้ดถัดไปของกล่องนั้นหายไปทันที</li>
+                        </ol>
                     </div>
                 </div>
             );
@@ -2552,7 +2724,7 @@ else if (pid > 0) {
                 { id: 'processmgmt', icon: 'fa-code-branch', label: 'fork / exec / wait' },
                 { id: 'thread', icon: 'fa-network-wired', label: 'Intro to Thread' },
                 { id: 'scheduling', icon: 'fa-microchip', label: 'CPU Scheduling' },
-                { id: 'anim', icon: 'fa-clapperboard', label: 'Process Animation', isHighlight: true },
+                { id: 'tree', icon: 'fa-tree', label: 'วาดต้นไม้ Process', isHighlight: true },
                 { id: 'strategy', icon: 'fa-crosshairs', label: 'กลยุทธ์ทำข้อสอบ', isHighlight: true },
                 { id: 'realquiz', icon: 'fa-clipboard-check', label: 'ข้อสอบจำลอง (รูปแบบจริง)', isHighlight: true },
                 { id: 'quiz', icon: 'fa-clipboard-question', label: 'Quiz ทบทวน (MCQ)' }
@@ -2614,7 +2786,7 @@ else if (pid > 0) {
                         )}
 
                         {/* Render special components */}
-                        {activeTab === 'anim' && <div className="max-w-5xl mx-auto"><ProcessAnimation /></div>}
+                        {activeTab === 'tree' && <div className="max-w-4xl mx-auto"><ProcessTreeTutor /></div>}
                         {activeTab === 'realquiz' && <div className="max-w-4xl mx-auto"><RealQuiz /></div>}
                         {activeTab === 'quiz' && <div className="max-w-4xl mx-auto"><Quiz /></div>}
                     </main>
