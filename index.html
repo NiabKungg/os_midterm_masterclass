@@ -1,0 +1,1784 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OS Midterm Masterclass</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f172a; color: #f8fafc; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        
+        .animate-fade-in { animation: fadeIn 0.4s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Animation specific styles */
+        .process-box { transition: all 0.5s ease-in-out; }
+        .zombie-state { filter: grayscale(100%); opacity: 0.6; border: 2px dashed #94a3b8; }
+        .exec-state { background: linear-gradient(135deg, #4c1d95, #7c3aed); border-color: #a78bfa; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // --- Helper Component: Syntax Highlighted Code Block ---
+        const CodeBlock = ({ code, language = "c" }) => {
+            const highlight = (text) => {
+                let html = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                // Keywords
+                html = html.replace(/\b(int|pid_t|if|else|return|void|char|NULL)\b/g, '<span class="text-pink-400 font-bold">$1</span>');
+                // Functions
+                html = html.replace(/\b(fork|wait|waitpid|exit|execlp|printf)\b/g, '<span class="text-blue-300">$1</span>');
+                // Strings
+                html = html.replace(/("[^"]*")/g, '<span class="text-yellow-300">$1</span>');
+                // Comments
+                html = html.replace(/(\/\/.*)/g, '<span class="text-emerald-500/70 italic">$1</span>');
+                // Numbers
+                html = html.replace(/\b(\d+)\b/g, '<span class="text-purple-300">$1</span>');
+                return { __html: html };
+            };
+
+            return (
+                <div className="relative group rounded-xl overflow-hidden shadow-lg border border-slate-700/50 mt-4 mb-6">
+                    <div className="bg-slate-800 px-4 py-2 border-b border-slate-700 flex justify-between items-center text-xs text-slate-400 font-mono">
+                        <span>Code ({language})</span>
+                        <div className="flex gap-2"><div className="w-3 h-3 rounded-full bg-red-500"></div><div className="w-3 h-3 rounded-full bg-yellow-500"></div><div className="w-3 h-3 rounded-full bg-green-500"></div></div>
+                    </div>
+                    <pre className="bg-slate-950 p-4 overflow-x-auto text-sm font-mono leading-relaxed"><code dangerouslySetInnerHTML={highlight(code)} /></pre>
+                </div>
+            );
+        };
+
+        // --- SVG Diagram Helpers ---
+        const Diagram = ({ title, w = 680, h = 220, children }) => (
+            <div className="mt-5 bg-slate-900/70 rounded-xl border border-slate-700/60 p-4">
+                <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2"><i className="fa-solid fa-diagram-project mr-2"></i>{title}</div>
+                <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-auto select-none">{children}</svg>
+            </div>
+        );
+
+        const DBox = ({ x, y, w = 150, h = 60, title, sub, fill = '#1e293b', stroke = '#3b82f6', text = '#f1f5f9', titleSize = 13 }) => {
+            const cx = x + w / 2;
+            const subs = sub ? (Array.isArray(sub) ? sub : [sub]) : [];
+            return (
+                <g>
+                    <rect x={x} y={y} width={w} height={h} rx={8} fill={fill} stroke={stroke} strokeWidth={1.5} />
+                    <text x={cx} y={y + h / 2 - (subs.length ? subs.length * 7 : -5)} textAnchor="middle" fill={text} fontSize={titleSize} fontWeight="bold">{title}</text>
+                    {subs.map((s, i) => (
+                        <text key={i} x={cx} y={y + h / 2 + 6 + i * 14} textAnchor="middle" fill="#94a3b8" fontSize="10.5">{s}</text>
+                    ))}
+                </g>
+            );
+        };
+
+        const DCode = ({ x, y, w = 260, h = 95, title, code, stroke = '#3b82f6', titleColor = '#93c5fd' }) => {
+            const lines = code.split('\n');
+            return (
+                <g>
+                    <rect x={x} y={y} width={w} height={h} rx={8} fill="#0f172a" stroke={stroke} strokeWidth={1.5} />
+                    <text x={x + 12} y={y + 18} fontSize="11" fontWeight="bold" fill={titleColor}>{title}</text>
+                    <line x1={x} y1={y + 26} x2={x + w} y2={y + 26} stroke="#334155" strokeWidth={1} />
+                    {lines.map((l, i) => (
+                        <text key={i} x={x + 12} y={y + 42 + i * 15} fontSize="10.5" fontFamily="monospace" fill="#e2e8f0">{l}</text>
+                    ))}
+                </g>
+            );
+        };
+
+        const DArrow = ({ x1, y1, x2, y2, label, dashed = false, color = '#94a3b8', labelColor = '#cbd5e1', lx = 0, ly = 0 }) => {
+            const dx = x2 - x1, dy = y2 - y1;
+            const len = Math.hypot(dx, dy);
+            if (len === 0) return null;
+            const ux = dx / len, uy = dy / len;
+            const ax = x2 - 9 * ux + 4 * uy, ay = y2 - 9 * uy - 4 * ux;
+            const bx = x2 - 9 * ux - 4 * uy, by = y2 - 9 * uy + 4 * ux;
+            const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+            return (
+                <g>
+                    <line x1={x1} y1={y1} x2={x2 - 5 * ux} y2={y2 - 5 * uy} stroke={color} strokeWidth={1.5} strokeDasharray={dashed ? '5,4' : undefined} />
+                    <polygon points={`${x2},${y2} ${ax},${ay} ${bx},${by}`} fill={color} />
+                    {label && <text x={mx - 10 * uy + lx} y={my + 10 * ux + ly - 4} textAnchor="middle" fill={labelColor} fontSize="10">{label}</text>}
+                </g>
+            );
+        };
+
+        const Gantt = ({ segments, ticks, unit = 'ms' }) => {
+            const SCALE = 20, X0 = 90, Y = 16, H = 44;
+            const maxT = Math.max(...ticks.map(t => t.t));
+            return (
+                <svg viewBox={`0 0 ${X0 + maxT * SCALE + 40} 92`} className="w-full h-auto select-none">
+                    {segments.map((s, i) => (
+                        <g key={i}>
+                            <rect x={X0 + s.start * SCALE} y={Y} width={(s.end - s.start) * SCALE} height={H} fill={s.color} opacity="0.25" stroke={s.color} strokeWidth={1.5} />
+                            <text x={X0 + ((s.start + s.end) / 2) * SCALE} y={Y + H / 2 + 4} textAnchor="middle" fill="#f1f5f9" fontSize="11" fontWeight="bold">{s.label}</text>
+                        </g>
+                    ))}
+                    {ticks.map((tk, i) => (
+                        <g key={i}>
+                            <line x1={X0 + tk.t * SCALE} y1={Y + H} x2={X0 + tk.t * SCALE} y2={Y + H + 6} stroke="#64748b" strokeWidth={1} />
+                            <text x={X0 + tk.t * SCALE} y={Y + H + 18} textAnchor="middle" fill="#94a3b8" fontSize="10">{tk.label}</text>
+                        </g>
+                    ))}
+                    <text x={12} y={Y + H / 2 + 4} fill="#64748b" fontSize="10">เวลา</text>
+                </svg>
+            );
+        };
+
+        // --- Glossary: ศัพท์เฉพาะอธิบายแบบง่ายสุด ---
+        const Glossary = ({ title = "ศัพท์ต้องรู้ในหน้านี้ (ฉบับคนไม่เคยเรียน)", terms }) => (
+            <div className="bg-slate-800/70 p-5 rounded-xl border border-cyan-900/60 mt-6">
+                <h3 className="text-xl font-bold text-cyan-400 mb-4"><i className="fa-solid fa-book-open-reader mr-2"></i>{title}</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                    {terms.map(([term, def], i) => (
+                        <div key={i} className="bg-slate-900/70 p-3 rounded-lg border border-slate-700/60">
+                            <span className="text-cyan-300 font-bold">{term}</span>
+                            <span className="text-slate-500"> — </span>
+                            <span className="text-slate-300">{def}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+
+        // --- Inline Term Tooltip (i) ---
+        let termPopupState = null;
+        const termPopupListeners = [];
+        const showTermPopup = (word, def, x, y) => { termPopupState = { word, def, x, y }; termPopupListeners.forEach(f => f(termPopupState)); };
+        const hideTermPopup = () => { termPopupState = null; termPopupListeners.forEach(f => f(null)); };
+
+        const Term = ({ word, def, children }) => (
+            <span
+                className="cursor-help border-b border-dotted border-cyan-400/70 text-cyan-300"
+                onClick={(e) => { e.stopPropagation(); showTermPopup(word, def, e.clientX, e.clientY); }}
+            >
+                {children || word}
+                <i className="fa-solid fa-circle-info text-[10px] ml-0.5 text-cyan-500/80"></i>
+            </span>
+        );
+
+        const TermPopover = () => {
+            const [pop, setPop] = useState(null);
+            useEffect(() => {
+                const f = (p) => setPop(p);
+                termPopupListeners.push(f);
+                return () => { const i = termPopupListeners.indexOf(f); if (i >= 0) termPopupListeners.splice(i, 1); };
+            }, []);
+            useEffect(() => {
+                if (!pop) return;
+                const close = () => hideTermPopup();
+                window.addEventListener('click', close);
+                window.addEventListener('scroll', close, true);
+                return () => { window.removeEventListener('click', close); window.removeEventListener('scroll', close, true); };
+            }, [pop]);
+            if (!pop) return null;
+            const w = 300;
+            const x = Math.min(Math.max(pop.x + 14, 8), window.innerWidth - w - 8);
+            const y = Math.min(pop.y + 12, window.innerHeight - 140);
+            return (
+                <div className="fixed z-50 rounded-lg border border-cyan-500/50 bg-slate-800/95 shadow-2xl p-4 backdrop-blur" style={{ left: x, top: y, width: w }}>
+                    <div className="text-cyan-300 font-bold text-sm mb-1.5 flex items-center"><i className="fa-solid fa-circle-info mr-2"></i>{pop.word}</div>
+                    <p className="text-slate-300 text-xs leading-relaxed">{pop.def}</p>
+                    <p className="text-slate-500 text-[10px] mt-2">คลิกที่ใดก็ได้เพื่อปิด</p>
+                </div>
+            );
+        };
+
+        // --- Content Data ---
+        const contentData = {
+            intro: (
+                <div className="space-y-6">
+                    <h2 className="text-3xl font-black text-blue-400 border-b border-slate-700 pb-2">1. Intro to OS</h2>
+                    <p className="text-slate-300"><Term word="OS" def="โปรแกรมใหญ่ที่คอยดูแลเครื่องทั้งเครื่อง ทำหน้าที่แบ่ง CPU และหน่วยความจำให้ทุกโปรแกรมใช้ร่วมกันอย่างเป็นธรรม">Operating System (OS)</Term> คือซอฟต์แวร์ที่ทำหน้าที่เป็น "ผู้จัดการทรัพยากร (Resource Allocator)" ของคอมพิวเตอร์ ควบคุมทั้ง Hardware และ Software ให้ทำงานร่วมกันได้อย่างราบรื่น</p>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><i className="fa-solid fa-gears mr-2 text-blue-400"></i> OS มองจาก 2 มุม</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-300">
+                            <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                <strong className="text-emerald-300 block mb-1">มุมผู้ใช้ (User View)</strong>
+                                ผู้ใช้มอง OS เป็นเครื่องมือที่ทำให้ใช้คอมพิวเตอร์ได้<u>ง่าย สะดวก ปลอดภัย</u> ไม่ต้องยุ่งกับรายละเอียดฮาร์ดแวร์
+                            </div>
+                            <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                <strong className="text-blue-300 block mb-1">มุมระบบ (System View)</strong>
+                                OS เป็น <strong>Resource Allocator</strong> — แบ่งปัน CPU, Memory, I/O ให้ทุกโปรแกรมอย่างเป็นธรรมและมีประสิทธิภาพ อีกบทบาทคือ <strong>Control Program</strong> คอยควบคุมไม่ให้โปรแกรมทำงานผิดพลาดหรือละเมิดกัน
+                            </div>
+                        </div>
+                        <p className="mt-3 text-sm text-slate-300">เป้าหมายหลักของ OS: <span className="text-blue-300">สะดวกใช้ (Convenience)</span> + <span className="text-blue-300">ใช้ทรัพยากรคุ้ม (Efficiency)</span> + รองรับวิวัฒนาการฮาร์ดแวร์ได้</p>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-emerald-400 mb-3"><i className="fa-solid fa-shield-halved mr-2"></i> Dual Mode Operation</h3>
+                        <p className="text-sm text-slate-300 mb-2">เพื่อป้องกันไม่ให้โปรแกรมของผู้ใช้ (User Program) ทำงานผิดพลาดจนระบบพัง OS จะทำงานร่วมกับ Hardware โดยแบ่งโหมดการทำงานออกเป็น 2 โหมด (ควบคุมผ่าน Mode Bit):</p>
+                        <ul className="list-disc ml-6 space-y-2 text-sm text-slate-300">
+                            <li><Term word="Kernel Mode" def="โหมดของระบบ มีสิทธิทำได้ทุกอย่าง (Mode bit = 0)"><strong className="text-white">Kernel Mode (Mode bit = 0):</strong></Term> โหมดผู้ดูแลระบบ สามารถรัน<Term word="Privileged Instructions" def="คำสั่งอันตรายที่เฉพาะระบบเท่านั้นใช้ได้ เช่น สั่งการฮาร์ดแวร์โดยตรง">คำสั่งอันตราย (Privileged Instructions)</Term> ได้ทุกอย่าง เช่น การเข้าถึง Hardware โดยตรง การแก้ Timer</li>
+                            <li><Term word="User Mode" def="โหมดของโปรแกรมทั่วไป ถูกจำกัดสิทธิ ต้องขอให้ OS ทำแทน (Mode bit = 1)"><strong className="text-white">User Mode (Mode bit = 1):</strong></Term> โหมดผู้ใช้งานทั่วไป โปรแกรมปกติจะรันในโหมดนี้ หากต้องการใช้งาน Hardware ต้องร้องขอ OS ให้ทำแทน</li>
+                        </ul>
+                        <p className="mt-2 text-sm text-slate-400"><span className="text-yellow-300">จดจำ:</span> คำสั่ง Privileged ใช้ได้<u>เฉพาะใน Kernel Mode</u> ถ้าโปรแกรม User พยายามรันจะถูก Hardware ปัดตกทันที</p>
+                        <Diagram title="การสลับโหมดผ่าน System Call (Trap)" w={680} h={170}>
+                            <rect x={20} y={20} width={300} height={130} rx={10} fill="#0f172a" stroke="#334155" strokeDasharray="6,4" />
+                            <text x={170} y={42} textAnchor="middle" fill="#64748b" fontSize="11">User Mode (Mode bit = 1)</text>
+                            <rect x={360} y={20} width={300} height={130} rx={10} fill="#0f172a" stroke="#334155" strokeDasharray="6,4" />
+                            <text x={510} y={42} textAnchor="middle" fill="#64748b" fontSize="11">Kernel Mode (Mode bit = 0)</text>
+                            <DBox x={60} y={70} w={150} h={60} title="โปรแกรมผู้ใช้" sub="รันปกติใน User Mode" stroke="#60a5fa" />
+                            <DBox x={470} y={70} w={150} h={60} title="Kernel (OS)" sub="ทำคำสั่งแทนให้" stroke="#4ade80" />
+                            <DArrow x1={210} y1={90} x2={460} y2={90} label="System Call → Trap (สลับ mode)" color="#eab308" labelColor="#eab308" />
+                            <DArrow x1={460} y1={120} x2={215} y2={120} label="คืนผลลัพธ์กลับ User Mode" color="#94a3b8" />
+                        </Diagram>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-yellow-400 mb-3"><i className="fa-solid fa-bolt mr-2"></i> Interrupts (การขัดจังหวะ)</h3>
+                        <p className="text-sm text-slate-300 mb-3">การประสานงานหลักระหว่าง OS และ Hardware เมื่ออุปกรณ์ (เช่น Disk) ทำงานเสร็จ จะ<Term word="Interrupt" def="สัญญาณจากฮาร์ดแวร์ให้ CPU หยุดงานที่ทำอยู่ก่อน แล้วหันไปจัดการเรื่องใหม่">ส่งสัญญาณ Interrupt</Term> ไปยัง CPU เพื่อให้ CPU หยุดงานปัจจุบัน แล้วหันมาเรียกใช้<Term word="ISR" def="โปรแกรมสั้น ๆ ที่เตรียมไว้รับมือสัญญาณ interrupt แต่ละชนิด เหมือนพนักงานเฉพาะทางรอรับสาย">โปรแกรมจัดการ (Interrupt Service Routine - ISR)</Term> ทันที</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-300 mb-3">
+                            <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                <Term word="Hardware Interrupt" def="สัญญาณขัดจังหวะที่มาจากอุปกรณ์ภายนอก เช่น คีย์บอร์ด ดิสก์"><strong className="text-yellow-300 block mb-1">Hardware Interrupt</strong></Term>
+                                เกิดจากอุปกรณ์ภายนอกส่งสัญญาณมา (กดคีย์บอร์ด, Disk อ่านเสร็จ, Mouse เลื่อน) เกิดแบบ "ไม่บอกล่วงหน้า"
+                            </div>
+                            <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                <Term word="Trap" def="การที่โปรแกรมจงใจเรียกให้ CPU เข้าโหมด Kernel เพื่อขอใช้บริการ OS"><strong className="text-purple-300 block mb-1">Software Interrupt (Trap)</strong></Term>
+                                เกิดจากโปรแกรมจงใจเรียก เช่น System Call หรือเกิด Exception (หารด้วย 0, ใช้ Memory ผิด)
+                            </div>
+                        </div>
+                        <h4 className="text-white font-bold text-sm mb-2">ลำดับการจัดการ Interrupt (มี 4 ขั้น):</h4>
+                        <ol className="list-decimal ml-6 space-y-1 text-sm text-slate-300 mb-3">
+                            <li>CPU กำลังรันงาน → ได้รับสัญญาณ Interrupt → บันทึก State ปัจจุบัน (PC, Registers) ไว้ก่อน</li>
+                            <li>CPU <Term word="Interrupt Vector Table" def="ตารางที่เก็บที่อยู่ของโปรแกรมจัดการ interrupt แต่ละเบอร์ไว้">เปิดดู <strong>Interrupt Vector Table</strong></Term> เพื่อรู้ที่อยู่ของ ISR ที่ตรงกับเบอร์ Interrupt นั้น</li>
+                            <li>กระโดดไปรัน ISR ใน Kernel Mode</li>
+                            <li>รันเสร็จ → Restore State เดิม → กลับไปทำงานต่อเหมือนไม่มีอะไรเกิดขึ้น</li>
+                        </ol>
+                        <Diagram title="เส้นทางการขัดจังหวะ (Interrupt Flow)" w={680} h={150}>
+                            <DBox x={20} y={70} w={150} h={55} title="อุปกรณ์ I/O" sub="ทำงานเสร็จ / เกิดเหตุการณ์" stroke="#4ade80" />
+                            <DBox x={270} y={70} w={140} h={55} title="CPU" sub="หยุดงานปัจจุบัน" stroke="#60a5fa" />
+                            <DBox x={510} y={70} w={150} h={55} title="ISR ใน Kernel" sub="จัดการเสร็จ → กลับไปต่อ" stroke="#eab308" />
+                            <DArrow x1={170} y1={97} x2={265} y2={97} label="ส่ง Interrupt" color="#4ade80" labelColor="#4ade80" />
+                            <DArrow x1={410} y1={97} x2={505} y2={97} label="Vector Table" color="#eab308" labelColor="#eab308" />
+                        </Diagram>
+                    </div>
+                    <Glossary terms={[
+                        ['OS', 'โปรแกรมใหญ่ที่คอยดูแลเครื่องทั้งเครื่อง ทำหน้าที่แบ่ง CPU และหน่วยความจำให้ทุกโปรแกรมใช้ร่วมกันอย่างเป็นธรรม'],
+                        ['Kernel', 'แกนกลางของ OS มีสิทธิสูงสุด ทำคำสั่งอันตรายแทนโปรแกรมให้ เปรียบเสมือน "หัวใจ" ของระบบ'],
+                        ['Mode Bit', 'สวิตช์บน CPU บอกว่าตอนนี้ใครกำลังทำงาน — 0 = ระบบ (ทำอะไรก็ได้), 1 = โปรแกรมทั่วไป (ถูกจำกัด)'],
+                        ['Privileged Instruction', 'คำสั่งอันตรายที่เฉพาะระบบเท่านั้นใช้ได้ เช่น สั่งการฮาร์ดแวร์โดยตรง ถ้าโปรแกรมทั่วไปใช้จะถูกห้ามทันที'],
+                        ['Interrupt', 'สัญญาณ "กดกริ่ง" จากฮาร์ดแวร์ให้ CPU หยุดงานที่ทำอยู่ก่อน แล้วหันไปจัดการเรื่องใหม่'],
+                        ['ISR', 'โปรแกรมสั้น ๆ ที่เตรียมไว้รับมือสัญญาณ interrupt แต่ละชนิด เหมือนพนักงานเฉพาะทางที่รอรับสาย'],
+                        ['Trap', 'interrupt ที่ตัวโปรแกรมจงใจเรียกเอง เพื่อขอใช้บริการจาก OS (ต่างจาก interrupt ที่มาจากอุปกรณ์)'],
+                        ['Firmware', 'โปรแกรมที่ฝังติดเครื่องมาตั้งแต่โรงงาน อยู่ในชิป ROM ไม่หายแม้ปิดเครื่อง']
+                    ]} />
+                </div>
+            ),
+            boot: (
+                <div className="space-y-6">
+                    <h2 className="text-3xl font-black text-blue-400 border-b border-slate-700 pb-2">1.2 ขั้นตอนการบูตเครื่อง (Booting)</h2>
+                    <p className="text-slate-300">การบูตเครื่องคือลำดับขั้นที่พาเครื่องจาก "ไฟดับ" ไปจนถึงจุดที่ OS พร้อมใช้งาน โดยมีตัวละครหลักคือ <Term word="Bootstrap Program" def="โปรแกรมแรกที่ถูกเรียกตอนเปิดเครื่อง ฝังอยู่ใน ROM หน้าที่คือตามหา OS"><strong>Bootstrap Program</strong></Term> ที่ถูกฝังไว้ใน <Term word="Firmware" def="โปรแกรมที่ฝังติดเครื่องมาตั้งแต่โรงงาน อยู่ในชิป ROM ไม่หายแม้ปิดเครื่อง"><u>Firmware (ROM/EEPROM)</u></Term> ไม่ใช่บนดิสก์!</p>
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><i className="fa-solid fa-list-ol mr-2 text-blue-400"></i> ลำดับการบูต (ต้องจำเรียงให้ได้!)</h3>
+                        <ol className="list-decimal ml-6 space-y-2 text-sm text-slate-300">
+                            <li><strong>เปิดเครื่อง (Power On):</strong> CPU ถูกสั่งให้เริ่มรันโค้ด ณ Address พิเศษใน Firmware</li>
+                            <li><Term word="POST" def="ขั้นตอนที่เครื่องตรวจสุขภาพฮาร์ดแวร์ตัวเองตอนเปิดเครื่อง"><strong>POST (Power-On Self-Test):</strong></Term> Firmware ตรวจสอบฮาร์ดแวร์พื้นฐาน (RAM, CPU, การ์ดจอ)</li>
+                            <li><Term word="Bootstrap Loader" def="โปรแกรมที่อ่าน Boot Sector เพื่อโหลด OS ขึ้นมา"><strong>Bootstrap Loader:</strong></Term> Firmware <Term word="Boot Sector" def="พื้นที่เล็ก ๆ บนดิสก์ที่เก็บตัวโหลด OS เหมือนป้ายบอกทาง">ค้นหา Boot Sector</Term> (MBR/Boot Partition) เพื่อหา Bootloader (เช่น GRUB)</li>
+                            <li><strong>โหลด Kernel:</strong> Bootloader นำ Kernel เข้า Memory และส่งต่อการควบคุมให้</li>
+                            <li><strong>Kernel Init:</strong> Kernel เริ่มบริการต่าง ๆ แล้วรันโปรแกรมแรก <code className="text-yellow-300">init</code> / <code className="text-yellow-300">systemd</code> <Term word="PID" def="เลขบัตรประชาชนของแต่ละ Process ที่กำลังรัน">(PID 1)</Term></li>
+                            <li><strong>พร้อมใช้งาน:</strong> ระบบเปิดบริการเข้าสู่ Login / Desktop</li>
+                        </ol>
+                        <Diagram title="แผนภาพลำดับการบูตเครื่อง" w={680} h={170}>
+                            <DBox x={20} y={20} w={150} h={50} title="Power On" sub="เปิดเครื่อง" stroke="#60a5fa" />
+                            <DBox x={210} y={20} w={150} h={50} title="POST" sub="ตรวจฮาร์ดแวร์พื้นฐาน" stroke="#60a5fa" />
+                            <DBox x={400} y={20} w={190} h={50} title="Bootstrap Loader" sub="อ่าน Boot Sector" stroke="#60a5fa" />
+                            <DBox x={400} y={110} w={190} h={50} title="โหลด Kernel" sub="นำ Kernel เข้า Memory" stroke="#4ade80" />
+                            <DBox x={210} y={110} w={150} h={50} title="init / systemd" sub="โปรเซสแรก (PID 1)" stroke="#4ade80" />
+                            <DBox x={20} y={110} w={150} h={50} title="พร้อมใช้งาน" sub="Login / Desktop" stroke="#eab308" />
+                            <DArrow x1={170} y1={45} x2={205} y2={45} color="#60a5fa" />
+                            <DArrow x1={360} y1={45} x2={395} y2={45} color="#60a5fa" />
+                            <DArrow x1={495} y1={72} x2={495} y2={105} color="#94a3b8" />
+                            <DArrow x1={395} y1={135} x2={365} y2={135} color="#4ade80" />
+                            <DArrow x1={205} y1={135} x2={175} y2={135} color="#eab308" labelColor="#eab308" />
+                        </Diagram>
+                    </div>
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-emerald-400 mb-3"><i className="fa-solid fa-microchip mr-2"></i> BIOS vs UEFI</h3>
+                        <ul className="list-disc ml-6 space-y-2 text-sm text-slate-300">
+                            <li><Term word="BIOS" def="ระบบเฟิร์มแวร์รุ่นเก่า ทำงานแบบ text มีข้อจำกัดหลายอย่าง"><strong className="text-white">BIOS:</strong></Term> รุ่นเก่า จำกัดขนาด Boot Sector 512 bytes (MBR) บูตช้า ใช้ Text UI</li>
+                            <li><Term word="UEFI" def="ระบบเฟิร์มแวร์รุ่นใหม่ ใช้เมาส์ได้ บูตไว มี Secure Boot"><strong className="text-white">UEFI:</strong></Term> รุ่นใหม่ รองรับพาร์ติชัน GPT, <Term word="Secure Boot" def="ระบบตรวจลายเซ็นของ OS ก่อนยอมบูต เพื่อกันมัลแวร์">Secure Boot</Term> (ตรวจ Signature ก่อนบูต), บูตเร็วขึ้น ใช้ GUI</li>
+                        </ul>
+                        <p className="mt-3 text-yellow-300 text-sm"><i className="fa-solid fa-lightbulb"></i> ทริคสอบ: ข้อสอบชอบถามว่า Bootstrap Program อยู่ที่ไหน → คำตอบคือ Firmware (ROM) ไม่ใช่ Hard Disk</p>
+                    </div>
+                    <Glossary terms={[
+                        ['ROM / EEPROM', 'หน่วยความจำแบบอ่านอย่างเดียว (แก้ยาก) ใช้เก็บโปรแกรมบูตเครื่องไว้ถาวร ไฟดับก็ไม่หาย'],
+                        ['POST', 'ขั้นตอนที่เครื่อง "ตรวจสุขภาพ" ฮาร์ดแวร์ตัวเองตอนเปิดเครื่อง เช่น เช็คว่ามี RAM กี่ GB'],
+                        ['Bootstrap Loader', 'โปรแกรมแรกที่ถูกเรียกตอนเปิดเครื่อง หน้าที่เดียวคือตามหา OS แล้วปลุกให้ตื่น'],
+                        ['Boot Sector', 'พื้นที่เล็ก ๆ บนดิสก์ที่เก็บตัวโหลด OS ไว้ เหมือนป้ายบอกทางให้ Bootstrap Loader'],
+                        ['PID', 'เลขประจำตัวของแต่ละโปรเซส เหมือนเลขบัตรประชาชนของโปรแกรมที่กำลังรัน'],
+                        ['BIOS', 'ระบบเฟิร์มแวร์รุ่นเก่า ทำงานแบบ text ล้วน ๆ มีข้อจำกัดหลายอย่าง'],
+                        ['UEFI', 'ระบบเฟิร์มแวร์รุ่นใหม่ ใช้เมาส์ได้ บูตไว และมี Secure Boot'],
+                        ['Secure Boot', 'ระบบตรวจ "ลายเซ็น" ของ OS ก่อนยอมบูต เพื่อกันมัลแวร์แอบแทรกตัว']
+                    ]} />
+                </div>
+            ),
+            virt: (
+                <div className="space-y-6">
+                    <h2 className="text-3xl font-black text-blue-400 border-b border-slate-700 pb-2">1.4 - 1.6 Virtual Machine & Container</h2>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><i className="fa-solid fa-box mr-2 text-purple-400"></i> <Term word="Virtual Machine" def="เครื่องคอมพิวเตอร์จำลองที่สร้างด้วยซอฟต์แวร์ ใช้ได้เหมือนเครื่องจริง">Virtual Machine</Term> (เครื่องเสมือน)</h3>
+                        <p className="text-sm text-slate-300 mb-3">VM คือการจำลองเครื่องคอมพิวเตอร์ทั้งเครื่องขึ้นมาด้วยซอฟต์แวร์ โดยมีตัวจัดการชื่อ <Term word="Hypervisor" def="ผู้จัดการที่แบ่งฮาร์ดแวร์จริงให้เครื่องเสมือนหลายเครื่องใช้งานร่วมกัน"><strong>Hypervisor (VMM - Virtual Machine Monitor)</strong></Term> ทำหน้าที่แบ่งปัน Hardware จริงให้ VM หลาย ๆ ตัว ใช้งานพร้อมกัน</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-300">
+                            <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                <strong className="text-blue-300 block mb-1">Type 1 (Bare-Metal)</strong>
+                                Hypervisor รันบน Hardware ตรง ๆ เลย ไม่ต้องผ่าน OS
+                                <br/><span className="text-slate-400">ตัวอย่าง: VMware ESXi, KVM, Hyper-V</span>
+                            </div>
+                            <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                <strong className="text-purple-300 block mb-1">Type 2 (Hosted)</strong>
+                                Hypervisor เป็นโปรแกรมรันบน OS ปกติอีกที
+                                <br/><span className="text-slate-400">ตัวอย่าง: VirtualBox, VMware Workstation</span>
+                            </div>
+                        </div>
+                        <Diagram title="โครงสร้าง VM — Hypervisor แบ่ง Hardware ให้เครื่องเสมือน" w={680} h={215}>
+                            <DBox x={40} y={30} w={210} h={75} title="VM 1" sub={["Guest OS เต็มตัว + App", "Kernel ของตัวเอง"]} stroke="#60a5fa" />
+                            <DBox x={430} y={30} w={210} h={75} title="VM 2" sub={["Guest OS เต็มตัว + App", "Kernel ของตัวเอง"]} stroke="#60a5fa" />
+                            <DBox x={200} y={135} w={280} h={40} title="Hypervisor (VMM)" sub="" stroke="#a78bfa" />
+                            <DBox x={200} y={190} w={280} h={20} title="Hardware จริง (CPU, RAM, Disk)" sub="" stroke="#4ade80" titleSize={10} />
+                            <DArrow x1={145} y1={108} x2={250} y2={130} color="#a78bfa" />
+                            <DArrow x1={535} y1={108} x2={430} y2={130} color="#a78bfa" />
+                            <DArrow x1={340} y1={178} x2={340} y2={185} color="#4ade80" />
+                        </Diagram>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><i className="fa-solid fa-cube mr-2 text-emerald-400"></i> Container (คอนเทนเนอร์)</h3>
+                        <p className="text-sm text-slate-300 mb-3">Container คือการ "แพ็ค" แอปพลิเคชันพร้อม Dependency ทั้งหมดไว้ด้วยกัน แต่ <u>ไม่จำลองเครื่องใหม่</u> — ทุก Container แชร์ <Term word="Host OS" def="OS จริงของเครื่อง (ตรงข้ามกับ Guest OS ที่อยู่ข้างใน VM)"><strong>Kernel ของ Host OS</strong></Term> ตัวเดียวกัน แยกความเป็นอิสระด้วย<Term word="Namespace" def="เทคนิคกั้นมุมมองให้แต่ละ Container เห็นเฉพาะของตัวเอง ไม่เห็นของคนอื่น">กลไก Namespace</Term> และ Cgroups</p>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm border border-slate-700 rounded-lg overflow-hidden">
+                                <thead className="bg-slate-900 text-slate-200">
+                                    <tr>
+                                        <th className="p-2 text-left">เปรียบเทียบ</th>
+                                        <th className="p-2 text-left">Virtual Machine</th>
+                                        <th className="p-2 text-left">Container</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="text-slate-300">
+                                    <tr className="border-t border-slate-700"><td className="p-2">Guest OS</td><td className="p-2">มี OS เต็มตัว (Kernel ตัวเอง)</td><td className="p-2">ไม่มี — แชร์ Kernel ของ Host</td></tr>
+                                    <tr className="border-t border-slate-700"><td className="p-2">ขนาด/ความเร็วบูต</td><td className="p-2">ใหญ่ (หลาย GB) / บูตนาที</td><td className="p-2">เล็ก (MB) / สตาร์ทวินาที</td></tr>
+                                    <tr className="border-t border-slate-700"><td className="p-2">Isolation (ความปลอดภัย)</td><td className="p-2 text-green-400">แข็งแกร่งมาก</td><td className="p-2 text-red-400">อ่อนกว่า (แชร์ Kernel)</td></tr>
+                                    <tr className="border-t border-slate-700"><td className="p-2">Performance</td><td className="p-2">มี Overhead พอสมควร</td><td className="p-2 text-green-400">ใกล้เคียง Native</td></tr>
+                                    <tr className="border-t border-slate-700"><td className="p-2">ตัวอย่าง</td><td className="p-2">VirtualBox, VMware</td><td className="p-2">Docker, Podman</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <Diagram title="โครงสร้าง Container — ทุกตัวแชร์ Kernel เดียวกัน" w={680} h={215}>
+                            <DBox x={30} y={30} w={160} h={75} title="Container A" sub={["App + Libraries"]} stroke="#4ade80" />
+                            <DBox x={260} y={30} w={160} h={75} title="Container B" sub={["App + Libraries"]} stroke="#4ade80" />
+                            <DBox x={490} y={30} w={160} h={75} title="Container C" sub={["App + Libraries"]} stroke="#4ade80" />
+                            <DBox x={200} y={135} w={280} h={40} title="Host OS — Kernel ตัวเดียว" sub="" stroke="#60a5fa" />
+                            <DBox x={200} y={190} w={280} h={20} title="Hardware จริง" sub="" stroke="#94a3b8" titleSize={10} />
+                            <DArrow x1={110} y1={108} x2={250} y2={130} color="#4ade80" />
+                            <DArrow x1={340} y1={108} x2={340} y2={130} color="#4ade80" />
+                            <DArrow x1={570} y1={108} x2={430} y2={130} color="#4ade80" />
+                            <DArrow x1={340} y1={178} x2={340} y2={185} color="#94a3b8" />
+                            <text x={340} y={18} textAnchor="middle" fill="#64748b" fontSize="10">แยกกันด้วย Namespace + Cgroups (ไม่มี Guest OS)</text>
+                        </Diagram>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-blue-300 mb-3"><i className="fa-solid fa-whale mr-2"></i> Docker พื้นฐาน</h3>
+                        <ul className="list-disc ml-6 space-y-2 text-sm text-slate-300">
+                            <li><Term word="Image" def="แม่แบบสำเร็จรูปสำหรับสร้าง Container เปรียบเสมือนพิมพ์เขียวที่ก๊อปปี้ได้ไม่จำกัด"><strong className="text-white">Image:</strong></Term> แม่แบบ (Blueprint) สำหรับสร้าง Container เปรียบเสมือน Class ใน OOP</li>
+                            <li><Term word="Container" def="กล่องที่แพ็คแอปพลิเคชันพร้อมของจำเป็นครบชุด เปิดใช้ได้ทันทีบนเครื่องไหนก็ได้"><strong className="text-white">Container:</strong></Term> Instance ที่รันจริง สร้างจาก Image เปรียบเสมือน Object</li>
+                            <li><Term word="Dockerfile" def="ไฟล์สูตรอาหารที่เขียนบอกขั้นตอนการสร้าง Image"><strong className="text-white">Dockerfile:</strong></Term> ไฟล์สคริปต์บอกขั้นตอนการสร้าง Image (FROM, RUN, COPY, CMD)</li>
+                            <li>คำสั่งยอดฮิต: <code className="text-yellow-300">docker run</code> (รัน container ใหม่), <code className="text-yellow-300">docker ps</code> (ดู container ที่รันอยู่), <code className="text-yellow-300">docker images</code> (ดู image ที่มี), <code className="text-yellow-300">docker build</code> (สร้าง image จาก Dockerfile)</li>
+                        </ul>
+                        <Diagram title="วงจรชีวิต Docker: จากโค้ด → Image → Container (รันที่ไหนก็ได้)" w={700} h={240}>
+                            <DBox x={20} y={40} w={160} h={70} title="โปรเจกต์" sub={["โค้ด + Dockerfile"]} stroke="#60a5fa" />
+                            <DBox x={270} y={40} w={150} h={70} title="Image" sub={["แม่แบบ (Blueprint)"]} stroke="#a78bfa" />
+                            <DBox x={510} y={40} w={170} h={70} title="Container" sub={["Instance ที่รันจริง"]} stroke="#4ade80" />
+                            <DArrow x1={180} y1={75} x2={265} y2={75} label="docker build" color="#60a5fa" labelColor="#60a5fa" />
+                            <DArrow x1={420} y1={75} x2={505} y2={75} label="docker run" color="#4ade80" labelColor="#4ade80" />
+                            <DBox x={255} y={160} w={180} h={50} title="Registry" sub="Docker Hub" stroke="#eab308" />
+                            <DArrow x1={330} y1={112} x2={330} y2={155} label="docker push" dashed={true} color="#eab308" labelColor="#eab308" lx={58} />
+                            <DBox x={520} y={160} w={160} h={50} title="เครื่องอื่น" sub={["pull → run ได้เหมือนกัน"]} stroke="#4ade80" />
+                            <DArrow x1={438} y1={185} x2={515} y2={185} label="docker pull" dashed={true} color="#4ade80" labelColor="#4ade80" />
+                        </Diagram>
+                    </div>
+                    <Glossary terms={[
+                        ['Virtual Machine', 'เครื่องคอมพิวเตอร์ "จำลอง" ที่สร้างขึ้นด้วยซอฟต์แวร์ — เหมือนมีเครื่องปลอมอีกเครื่องอยู่ภายในเครื่องจริง'],
+                        ['Hypervisor', 'ผู้จัดการที่แบ่งฮาร์ดแวร์จริง (CPU, RAM) ให้เครื่องเสมือนหลาย ๆ เครื่องใช้งานร่วมกัน'],
+                        ['Guest OS', 'OS ที่รันอยู่ "ข้างใน" เครื่องเสมือน ส่วน Host OS คือ OS ของเครื่องจริง'],
+                        ['Container', 'กล่องที่แพ็คแอปพลิเคชันพร้อมของจำเป็นครบชุด เปิดใช้ได้ทันทีบนเครื่องไหนก็ได้'],
+                        ['Image', 'แม่แบบสำเร็จรูปสำหรับสร้าง Container เปรียบเสมือนพิมพ์เขียวที่ใช้ก๊อปปี้ได้ไม่จำกัด'],
+                        ['Dockerfile', 'ไฟล์ "สูตรอาหาร" ที่เขียนบอกขั้นตอนการสร้าง Image เช่น เริ่มจากอะไร ใส่ไฟล์อะไร'],
+                        ['Registry', 'โกดังออนไลน์เก็บ Image ไว้แชร์ให้คนอื่นดาวน์โหลด (Docker Hub)'],
+                        ['Namespace', 'เทคนิคกั้นมุมมองให้แต่ละ Container เห็นเฉพาะของตัวเอง ไม่เห็นของคนอื่น']
+                    ]} />
+                </div>
+            ),
+            structure: (
+                <div className="space-y-6">
+                    <h2 className="text-3xl font-black text-blue-400 border-b border-slate-700 pb-2">2. OS Structure</h2>
+                    
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><i className="fa-solid fa-code mr-2 text-blue-400"></i> System Call (ประตูสู่ OS)</h3>
+                        <p className="text-sm text-slate-300 mb-3">เมื่อโปรแกรมใน User Mode ต้องการใช้ทรัพยากร (เช่น อ่านไฟล์, สร้าง Process) จะ<Term word="System Call" def="ช่องทางเดียวที่โปรแกรมใช้ร้องขอให้ OS ทำอะไรให้ เหมือนเคาน์เตอร์บริการด่วน">ต้องทำผ่าน <strong>System Call</strong></Term> ซึ่งจะเป็นการ Trigger ให้เกิด <Term word="Trap" def="การที่โปรแกรมจงใจเรียกให้ CPU เข้าโหมด Kernel เพื่อขอใช้บริการ OS">Software Interrupt (Trap)</Term> เพื่อเปลี่ยนจาก User Mode ไปเป็น Kernel Mode</p>
+                        <ul className="list-disc ml-6 space-y-1 text-sm text-slate-300">
+                            <li>เรามักไม่เรียก System Call ตรงๆ แต่<Term word="API" def="คนกลางที่ช่วยให้โปรแกรมเมอร์เรียกใช้ OS ได้ง่าย ๆ โดยไม่ต้องรู้กลไกข้างใน">เรียกผ่าน <strong>API</strong></Term> (Application Programming Interface)</li>
+                            <li>ตัวอย่าง API: <Term word="POSIX" def="มาตรฐานคำสั่งของระบบตระกูล Unix/Linux"><span className="text-blue-300">POSIX API</span></Term> (สำหรับ Linux/Unix), <Term word="Win32" def="ชุด API มาตรฐานของ Windows"><span className="text-blue-300">Win32 API</span></Term> (สำหรับ Windows)</li>
+                        </ul>
+                        <h4 className="text-white font-bold text-sm mt-4 mb-2">เบื้องหลังการเรียก System Call (5 ขั้นตอน):</h4>
+                        <ol className="list-decimal ml-6 space-y-1 text-sm text-slate-300">
+                            <li>โปรแกรมเรียกฟังก์ชัน API (เช่น <code className="text-yellow-300">printf</code> ภายในไปเรียก <code className="text-yellow-300">write()</code>)</li>
+                            <li>API ใส่ "เบอร์ของ System Call" และ parameters <Term word="Register" def="ที่เก็บข้อมูลจิ๋วความเร็วสูงสุดภายใน CPU ใช้ส่งค่าให้ System Call">ลงใน Register</Term> (หรือ Stack)</li>
+                            <li>เรียกคำสั่ง Trap → CPU เปลี่ยน Mode Bit เป็น 0 (เข้า Kernel Mode)</li>
+                            <li>Kernel เปิดตาราง System Call Table หา Handler ที่ตรงกับเบอร์ → รันบริการนั้นให้</li>
+                            <li>คืนผลลัพธ์กลับโปรแกรม พร้อมสลับกลับ User Mode</li>
+                        </ol>
+                        <Diagram title="เส้นทางการเรียก System Call" w={680} h={150}>
+                            <DBox x={20} y={70} w={140} h={55} title="User Program" sub="printf / write" stroke="#60a5fa" />
+                            <DBox x={215} y={70} w={130} h={55} title="API" sub="POSIX / Win32" stroke="#a78bfa" />
+                            <DBox x={400} y={70} w={140} h={55} title="System Call" sub="Trap → Mode bit 0" stroke="#eab308" />
+                            <DBox x={560} y={70} w={100} h={55} title="Kernel" sub="ให้บริการ" stroke="#4ade80" />
+                            <DArrow x1={160} y1={97} x2={210} y2={97} color="#60a5fa" />
+                            <DArrow x1={345} y1={97} x2={395} y2={97} color="#a78bfa" />
+                            <DArrow x1={540} y1={97} x2={555} y2={97} color="#eab308" />
+                        </Diagram>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><i className="fa-solid fa-box-open mr-2 text-emerald-400"></i> วิธีส่ง Parameters ให้ System Call</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-slate-300">
+                            <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                <strong className="text-blue-300 block mb-1">1. ผ่าน Register</strong>
+                                ใส่ค่าใน Register ตรง ๆ
+                                <br/><span className="text-green-400">เร็วที่สุด</span>
+                                <br/><span className="text-red-400">จำกัด: Register มีน้อย ถ้าพารามิเตอร์เยอะไม่พอ</span>
+                            </div>
+                            <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                <strong className="text-purple-300 block mb-1">2. ผ่าน Block (Memory)</strong>
+                                เก็บ parameters ใน Block ของ Memory แล้วใส่ "ที่อยู่ของ Block" ไว้ใน Register
+                                <br/><span className="text-green-400">ส่งได้ไม่จำกัดจำนวน</span>
+                            </div>
+                            <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                <strong className="text-yellow-300 block mb-1">3. ผ่าน Stack</strong>
+                                Push parameters ลง Stack โปรแกรมเรียกผ่าน push/pop
+                                <br/><span className="text-slate-400">ที่นิยมใช้ในหลาย OS</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><i className="fa-solid fa-list mr-2 text-orange-400"></i> หมวดหมู่ของ System Call ที่ต้องรู้</h3>
+                        <ul className="list-disc ml-6 space-y-1 text-sm text-slate-300">
+                            <li><strong className="text-white">Process Control:</strong> สร้าง/จบ/รอ process เช่น <code className="text-yellow-300">fork(), exec(), wait(), exit()</code></li>
+                            <li><strong className="text-white">File Management:</strong> <code className="text-yellow-300">open(), read(), write(), close()</code></li>
+                            <li><strong className="text-white">Device Management:</strong> ขอใช้/คืนอุปกรณ์ เช่น <code className="text-yellow-300">ioctl(), read(), write()</code></li>
+                            <li><strong className="text-white">Information Maintenance:</strong> ดูเวลา ดูข้อมูลระบบ เช่น <code className="text-yellow-300">getpid(), time()</code></li>
+                            <li><strong className="text-white">Communication:</strong> ส่งข้อความระหว่าง process เช่น <code className="text-yellow-300">pipe(), shmget(), socket()</code></li>
+                        </ul>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><i className="fa-solid fa-sitemap mr-2 text-purple-400"></i> สถาปัตยกรรมของ Kernel</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-300">
+                            <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                <Term word="Monolithic Kernel" def="แนวคิดเอาทุกบริการรวมไว้ใน Kernel เดียว — เร็ว แต่พังจุดเดียวน็อคทั้งระบบ"><strong className="text-white block mb-1">Monolithic Kernel</strong></Term>
+                                โครงสร้างแบบดั้งเดิม เอาทุกบริการ (Memory, I/O, File System) ยัดรวมไว้ใน Kernel เดียวกัน 
+                                <br/><span className="text-green-400">ข้อดี:</span> ทำงานเร็วมาก เพราะไม่ต้องเปลี่ยนโหมดไปมา
+                                <br/><span className="text-red-400">ข้อเสีย:</span> โค้ดซับซ้อน ถ้าพังจุดนึง ระบบอาจล่มทั้งหมด
+                            </div>
+                            <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                <Term word="Microkernel" def="แนวคิดแยกบริการออกไป User Space เหลือแค่ส่งข้อความ — ปลอดภัยแต่ช้ากว่า"><strong className="text-white block mb-1">Microkernel</strong></Term>
+                                ย้ายบริการที่ไม่จำเป็นออกไปอยู่ฝั่ง User Space เหลือไว้แค่การสื่อสารพื้นฐาน <Term word="Message Passing" def="วิธีคุยกันระหว่างส่วนต่าง ๆ ของระบบโดยส่งข้อความไปหากัน">(Message Passing)</Term> ใน Kernel
+                                <br/><span className="text-green-400">ข้อดี:</span> เสถียรสูง ปลอดภัย ขยายระบบง่าย
+                                <br/><span className="text-red-400">ข้อเสีย:</span> ช้ากว่า เพราะต้องส่งข้อความข้ามโหมดบ่อยครั้ง
+                            </div>
+                        </div>
+                        <Diagram title="เทียบโครงสร้าง Monolithic vs Microkernel" w={680} h={260}>
+                            <text x={170} y={30} textAnchor="middle" fill="#94a3b8" fontSize="12" fontWeight="bold">Monolithic (บริการรวมใน Kernel)</text>
+                            <text x={510} y={30} textAnchor="middle" fill="#94a3b8" fontSize="12" fontWeight="bold">Microkernel (บริการย้ายไป User Space)</text>
+                            <line x1={340} y1={15} x2={340} y2={245} stroke="#334155" strokeDasharray="6,4" />
+                            <DBox x={40} y={45} w={110} h={40} title="App 1" stroke="#60a5fa" />
+                            <DBox x={160} y={45} w={110} h={40} title="App 2" stroke="#60a5fa" />
+                            <rect x={40} y={105} width={230} height={120} rx={10} fill="#1e293b" stroke="#4ade80" strokeWidth={1.5} />
+                            <text x={155} y={125} textAnchor="middle" fill="#4ade80" fontSize="11" fontWeight="bold">Kernel (ทุกบริการอยู่ตรงนี้)</text>
+                            <DBox x={55} y={140} w={90} h={35} title="Memory" stroke="#64748b" titleSize={11} />
+                            <DBox x={155} y={140} w={90} h={35} title="File Sys" stroke="#64748b" titleSize={11} />
+                            <DBox x={55} y={180} w={90} h={35} title="I/O" stroke="#64748b" titleSize={11} />
+                            <DBox x={155} y={180} w={90} h={35} title="Scheduler" stroke="#64748b" titleSize={11} />
+                            <DArrow x1={95} y1={85} x2={95} y2={100} color="#60a5fa" />
+                            <DArrow x1={215} y1={85} x2={215} y2={100} color="#60a5fa" />
+                            <DBox x={380} y={45} w={110} h={40} title="App 1" stroke="#60a5fa" />
+                            <DBox x={500} y={45} w={110} h={40} title="App 2" stroke="#60a5fa" />
+                            <DBox x={385} y={100} w={100} h={35} title="File Server" sub="" stroke="#a78bfa" titleSize={11} />
+                            <DBox x={500} y={100} w={100} h={35} title="Memory Srv" stroke="#a78bfa" titleSize={11} />
+                            <text x={510} y={125} textAnchor="middle" fill="#a78bfa" fontSize="9.5">User Space</text>
+                            <rect x={390} y={175} width={200} height={60} rx={10} fill="#1e293b" stroke="#4ade80" strokeWidth={1.5} />
+                            <text x={490} y={200} textAnchor="middle" fill="#4ade80" fontSize="11" fontWeight="bold">Microkernel</text>
+                            <text x={490} y={218} textAnchor="middle" fill="#94a3b8" fontSize="9.5">(เหลือแค่ Message Passing)</text>
+                            <DArrow x1={435} y1={135} x2={460} y2={170} label="Msg" color="#eab308" labelColor="#eab308" />
+                            <DArrow x1={550} y1={135} x2={520} y2={170} label="Msg" color="#eab308" labelColor="#eab308" />
+                        </Diagram>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><i className="fa-solid fa-layer-group mr-2 text-cyan-400"></i> โครงสร้างแบบอื่น ๆ ที่ควรรู้จัก</h3>
+                        <ul className="list-disc ml-6 space-y-2 text-sm text-slate-300">
+                            <li><strong className="text-cyan-300">Layered OS:</strong> แบ่งระบบเป็นชั้น ๆ (Layer) แต่ละชั้นเรียกใช้บริการได้เฉพาะชั้นที่อยู่ต่ำกว่า 1 ชั้น — ตรวจสอบง่าย แต่ช้าเพราะต้องผ่านหลายชั้น</li>
+                            <li><strong className="text-cyan-300">Hybrid:</strong> ผสมผสาน เช่น Windows/MacOS ใช้ Kernel หลักแบบ Monolithic แต่มีบริการบางส่วนทำงานคล้าย Microkernel (ออกสอบแนว "ตัวไหนคือตัวอย่างของอะไร" บ่อย)</li>
+                        </ul>
+                    </div>
+                    <Glossary terms={[
+                        ['System Call', 'ช่องทางเดียวที่โปรแกรมใช้ "ร้องขอ" ให้ OS ทำอะไรให้ เช่น เปิดไฟล์ สร้างโปรเซส เหมือนเคาน์เตอร์บริการด่วน'],
+                        ['API', 'คนกลางที่ช่วยให้โปรแกรมเมอร์เรียกใช้ OS ได้ง่าย ๆ โดยไม่ต้องรู้กลไกข้างใน'],
+                        ['Trap', 'ขั้นตอนการเปลี่ยนจาก User Mode เข้า Kernel Mode อย่างเป็นทางการ เมื่อโปรแกรมขอใช้บริการ'],
+                        ['Register', 'ที่เก็บข้อมูลจิ๋วความเร็วสูงสุดที่อยู่ภายใน CPU ใช้ส่งค่าต่าง ๆ ให้ System Call'],
+                        ['POSIX', 'มาตรฐานคำสั่งของระบบตระกูล Unix/Linux ทำให้โปรแกรมเขียนครั้งเดียวใช้ได้หลายระบบ'],
+                        ['Monolithic', 'แนวคิด "เอาทุกอย่างรวมไว้ที่เดียว" — เร็ว แต่ถ้าพังจุดเดียวก็น็อคทั้งระบบ'],
+                        ['Microkernel', 'แนวคิด "แยกส่วนออกไปข้างนอก" — ปลอดภัย แต่วิ่งช้ากว่าเพราะส่งข้อความไป-มา'],
+                        ['Message Passing', 'วิธีคุยกันระหว่างส่วนต่าง ๆ ของระบบโดยส่ง "ข้อความ" ไปหากัน']
+                    ]} />
+                </div>
+            ),
+            ostypes: (
+                <div className="space-y-6">
+                    <h2 className="text-3xl font-black text-blue-400 border-b border-slate-700 pb-2">2.2 ประเภทของ OS</h2>
+                    <p className="text-slate-300">OS แบ่งได้หลายมิติ ข้อสอบชอบถามทั้ง <strong>ตามวิธีการป้อนข้อมูล</strong> และ <strong>ตามจำนวนผู้ใช้/งานที่รันพร้อมกัน</strong></p>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><i className="fa-solid fa-keyboard mr-2 text-blue-400"></i> แบ่งตามวิธีการป้อนข้อมูล</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-slate-300">
+                            <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                <Term word="Batch OS" def="รวบงานเป็นกอง ๆ แล้วรันเรียงไปทีละกอง ไม่มีคนนั่งคุยกับเครื่อง"><strong className="text-yellow-300 block mb-1">Batch OS</strong></Term>
+                                รวบรวมงานเป็น "กอง" (Batch) แล้วประมวลผลทีละกอง ผู้ใช้ไม่ interact ระหว่างรัน
+                                <br/><Term word="Throughput" def="ปริมาณงานที่เสร็จต่อช่วงเวลา ยิ่งมากยิ่งดี"><span className="text-green-400">ข้อดี:</span> Throughput</Term> สูง ใช้ CPU คุ้ม
+                                <br/><span className="text-red-400">ข้อเสีย:</span> ไม่ตอบสนองทันที (เช่น ระบบเงินเดือนบริษัท)
+                            </div>
+                            <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                <Term word="Time-sharing" def="แบ่งเวลา CPU สลับกันเร็วมากจนผู้ใช้หลายคนรู้สึกเหมือนใช้เครื่องอยู่คนเดียว"><strong className="text-emerald-300 block mb-1">Interactive (Time-sharing)</strong></Term>
+                                ผู้ใช้ interact กับระบบได้ OS สลับแบ่งเวลา CPU ให้ผู้ใช้หลายคนหมุนเวียนกันเร็ว ๆ จนรู้สึกว่า "ใช้อยู่คนเดียว"
+                                <br/><span className="text-green-400">ข้อดี:</span> Response time ดี
+                                <br/><span className="text-red-400">ข้อเสีย:</span> Overhead จากการสลับงานสูง
+                            </div>
+                            <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                <Term word="Real-time OS" def="ระบบที่งานมีเส้นตาย ต้องเสร็จตรงเวลา ผิดนัดคือล้มเหลว"><strong className="text-red-300 block mb-1">Real-time OS</strong></Term>
+                                งานต้องเสร็จภายใน Deadline ที่กำหนดเด็ดขาด
+                                <br/><span className="text-white">Hard RT:</span> พลาด deadline = ระบบล้มเหลว (ระบบเบรก, เครื่องบิน)
+                                <br/><span className="text-white">Soft RT:</span> พลาดได้บ้าง ขอแค่ส่วนใหญ่ทัน (มัลติมีเดีย)
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><i className="fa-solid fa-users mr-2 text-purple-400"></i> แบ่งตามจำนวนผู้ใช้ / งานที่รันพร้อมกัน</h3>
+                        <ul className="list-disc ml-6 space-y-2 text-sm text-slate-300">
+                            <li><strong className="text-blue-300">Single-user vs Multi-user:</strong> รองรับผู้ใช้ 1 คน หรือหลายคนพร้อมกัน (เช่น server ที่มีหลายคน login พร้อมกัน)</li>
+                            <li><strong className="text-blue-300">Single-tasking vs Multi-tasking:</strong> รันได้ 1 งาน หรือหลายงานสลับกัน</li>
+                        </ul>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-emerald-900/50">
+                        <h3 className="text-xl font-bold text-emerald-400 mb-3"><i className="fa-solid fa-lightbulb mr-2"></i> ศัพท์คู่ที่ข้อสอบชอบสลับหลอก</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-300">
+                            <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                <Term word="Multiprogramming" def="โหลดงานหลายตัวไว้ใน Memory ตัวไหนรอ I/O ก็สลับไปรันอีกตัว"><strong className="text-white block mb-1">Multiprogramming</strong></Term>
+                                โหลดงานหลายงานไว้ใน Memory เมื่อตัวนึงรอ I/O ก็สลับไปรันอีกตัว
+                                <br/><span className="text-yellow-300">เป้าหมาย: เพิ่ม CPU Utilization</span>
+                            </div>
+                            <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                <Term word="Multitasking" def="สลับงานถี่มาก ๆ ด้วยช่วงเวลาสั้น ๆ เพื่อให้ผู้ใช้ interact ได้พร้อมกัน"><strong className="text-white block mb-1">Multitasking (Time-sharing)</strong></Term>
+                                <Term word="Time Quantum" def="ช่วงเวลาสั้น ๆ ที่แต่ละงานได้ใช้ CPU ต่อหนึ่งรอบ ก่อนถูกสลับให้คนถัดไป">สลับงานด้วยความถี่สูงมาก (Time Quantum)</Term> เพื่อให้ผู้ใช้หลายคน interact ได้พร้อมกัน
+                                <br/><Term word="Response Time" def="เวลาที่รอตั้งแต่สั่งงานจนระบบเริ่มตอบสนองกลับมา"><span className="text-yellow-300">เป้าหมาย: ลด Response Time</span></Term>
+                            </div>
+                        </div>
+                        <Diagram title="เส้นเวลา CPU: Multiprogramming vs Multitasking" w={680} h={185}>
+                            <text x={10} y={40} fill="#94a3b8" fontSize="11" fontWeight="bold">Multiprogramming</text>
+                            <text x={10} y={55} fill="#64748b" fontSize="9.5">(สลับเฉพาะตอนรอ I/O)</text>
+                            <rect x={160} y={32} width={200} height={30} fill="#60a5fa" opacity="0.25" stroke="#60a5fa" />
+                            <text x={260} y={52} textAnchor="middle" fill="#e2e8f0" fontSize="11" fontWeight="bold">งาน A</text>
+                            <rect x={360} y={32} width={180} height={30} fill="#4ade80" opacity="0.25" stroke="#4ade80" />
+                            <text x={450} y={52} textAnchor="middle" fill="#e2e8f0" fontSize="11" fontWeight="bold">งาน B</text>
+                            <rect x={540} y={32} width={120} height={30} fill="#facc15" opacity="0.25" stroke="#facc15" />
+                            <text x={600} y={52} textAnchor="middle" fill="#e2e8f0" fontSize="11" fontWeight="bold">งาน C</text>
+                            <text x={10} y={120} fill="#94a3b8" fontSize="11" fontWeight="bold">Multitasking</text>
+                            <text x={10} y={135} fill="#64748b" fontSize="9.5">(สลับถี่มาก — Time Quantum)</text>
+                            {[
+                                ['A','#60a5fa'],['B','#4ade80'],['A','#60a5fa'],['B','#4ade80'],['C','#facc15'],
+                                ['A','#60a5fa'],['B','#4ade80'],['C','#facc15'],['A','#60a5fa'],['B','#4ade80']
+                            ].map((s, i) => (
+                                <g key={i}>
+                                    <rect x={160 + i * 50} y={112} width={50} height={30} fill={s[1]} opacity="0.25" stroke={s[1]} />
+                                    <text x={160 + i * 50 + 25} y={132} textAnchor="middle" fill="#e2e8f0" fontSize="10" fontWeight="bold">{s[0]}</text>
+                                </g>
+                            ))}
+                            <DArrow x1={160} y1={95} x2={160} y2={110} color="#94a3b8" />
+                        </Diagram>
+                    </div>
+                    <Glossary terms={[
+                        ['Batch', 'รวบงานเป็นกอง ๆ แล้วรันเรียงไปทีละกอง ไม่มีคนนั่งเฝ้าคุยกับเครื่อง (เช่น คำนวณเงินเดือนกลางคืน)'],
+                        ['Interactive', 'ผู้ใช้ "คุย" กับเครื่องได้ทันที พิมพ์ปุ๊บตอบปั๊บ'],
+                        ['Time-sharing', 'แบ่งเวลาของ CPU สลับกันเร็วมากจนผู้ใช้หลายคนรู้สึกเหมือนใช้เครื่องอยู่คนเดียว'],
+                        ['Real-time', 'งานมี "เส้นตาย" ต้องเสร็จตรงเวลา ผิดนัดคือล้มเหลว (เช่น ระบบเบรกรถยนต์)'],
+                        ['Throughput', 'ปริมาณงานที่เสร็จต่อช่วงเวลาหนึ่ง — ยิ่งมากยิ่งดีสำหรับระบบ batch'],
+                        ['Multiprogramming', 'โหลดงานหลายตัวไว้ใน Memory ตัวไหนรอ I/O ก็สลับไปรันอีกตัว ให้ CPU ไม่ว่าง'],
+                        ['Multitasking', 'สลับงานถี่มาก ๆ ด้วยช่วงเวลาสั้น ๆ เพื่อให้ผู้ใช้ interact ได้พร้อมกัน'],
+                        ['Time Quantum', 'ช่วงเวลาสั้น ๆ ที่แต่ละงานได้ใช้ CPU ต่อหนึ่งรอบ ก่อนถูกสลับให้คนถัดไป'],
+                        ['Response Time', 'เวลาที่รอตั้งแต่สั่งงาน จนระบบเริ่มตอบสนองกลับมา — อยากให้สั้นที่สุด']
+                    ]} />
+                </div>
+            ),
+            process1: (
+                <div className="space-y-6">
+                    <h2 className="text-3xl font-black text-blue-400 border-b border-slate-700 pb-2">3. Process Concept 1</h2>
+                    <p className="text-slate-300"><strong>โปรแกรม (Program)</strong> คือไฟล์บนดิสก์ที่อยู่นิ่งๆ (Inactive) ส่วน <Term word="Process" def="โปรแกรมที่ถูกปลุกให้รันแล้ว มีหน่วยความจำและสถานะของตัวเอง"><strong>โปรเซส (Process)</strong></Term> คือโปรแกรมที่ถูกโหลดเข้า Memory และกำลังทำงานอยู่ (Active Entity)</p>
+                    
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><i className="fa-solid fa-memory mr-2 text-emerald-400"></i> โครงสร้างของ Process ใน Memory</h3>
+                        <ul className="list-disc ml-6 space-y-2 text-sm text-slate-300">
+                            <li><Term word="Text Section" def="ส่วนของโปรเซสที่เก็บโค้ดคำสั่ง"><strong className="text-blue-300">Text Section:</strong></Term> เก็บชุดคำสั่ง (Code)</li>
+                            <li><Term word="Data Section" def="ส่วนของโปรเซสที่เก็บตัวแปร Global"><strong className="text-blue-300">Data Section:</strong></Term> <Term word="Global Variables" def="ตัวแปรที่ทุกส่วนของโปรแกรมเห็นร่วมกัน">เก็บตัวแปร Global Variables</Term></li>
+                            <li><Term word="Heap" def="พื้นที่จองหน่วยความจำเพิ่มระหว่างรัน (malloc)"><strong className="text-blue-300">Heap:</strong></Term> พื้นที่ Memory ที่จองระหว่างโปรแกรมทำงาน (Dynamic Allocation)</li>
+                            <li><Term word="Stack" def="พื้นที่เก็บตัวแปรชั่วคราวของฟังก์ชัน ทำงานเสร็จก็เก็บคืนอัตโนมัติ"><strong className="text-blue-300">Stack:</strong></Term> เก็บตัวแปร Local Variables, พารามิเตอร์ของฟังก์ชัน และ Return address</li>
+                            <li><Term word="Program Counter" def="เข็มชี้ว่ากำลังจะรันคำสั่งบรรทัดไหน"><strong className="text-blue-300">Program Counter (PC):</strong></Term> Register ที่ชี้ว่าคำสั่งต่อไปที่จะรันคือบรรทัดไหน</li>
+                        </ul>
+                        <Diagram title="การจัดวาง Process ใน Memory" w={400} h={300}>
+                            <DBox x={80} y={20} w={240} h={50} title="Stack" sub={["Local vars, Return address"]} stroke="#4ade80" />
+                            <DArrow x1={200} y1={72} x2={200} y2={92} color="#4ade80" label="↓ เติบโตลง" labelColor="#4ade80" />
+                            <DBox x={80} y={95} w={240} h={50} title="Heap" sub={["จองตอนรัน (malloc)"]} stroke="#eab308" />
+                            <DArrow x1={200} y1={147} x2={200} y2={167} color="#eab308" label="↑ เติบโตขึ้น" labelColor="#eab308" />
+                            <DBox x={80} y={170} w={240} h={45} title="Data Section" sub={["Global variables"]} stroke="#60a5fa" />
+                            <DBox x={80} y={225} w={240} h={45} title="Text Section" sub={["Code (กันแก้ไข)"]} stroke="#f87171" />
+                        </Diagram>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><i className="fa-solid fa-arrows-spin mr-2 text-yellow-400"></i> Process States (สถานะของโปรเซส)</h3>
+                        <p className="text-sm text-slate-300 mb-2">วงจรชีวิตของ Process จะเปลี่ยนสถานะไปมา ดังนี้:</p>
+                        <div className="flex flex-wrap gap-2 text-xs font-mono">
+                            <span className="bg-slate-700 px-3 py-1 rounded">New (กำลังสร้าง)</span> ➔
+                            <Term word="Ready" def="สถานะยืนรอคิวใช้ CPU — ทุกอย่างพร้อมแล้ว เหลือแค่รอเรียกตัว"><span className="bg-blue-900 px-3 py-1 rounded text-blue-200">Ready (รอคิวรัน)</span></Term> ➔
+                            <Term word="Running" def="สถานะกำลังใช้ CPU ทำงาน"><span className="bg-green-900 px-3 py-1 rounded text-green-200">Running (รันอยู่บน CPU)</span></Term> ➔
+                            <span className="bg-slate-700 px-3 py-1 rounded">Terminated (จบ)</span>
+                        </div>
+                        <p className="text-sm text-slate-400 mt-2">*หากขณะ Running อยู่ แล้วต้องรอ I/O จะถูกย้ายไปสถานะ <Term word="Waiting" def="สถานะหลบไปรออุปกรณ์ I/O ทำงานเสร็จ ระหว่างนี้ไม่ต้องใช้ CPU"><span className="text-yellow-400">Waiting (หรือ Blocked)</span></Term></p>
+                        <Diagram title="แผนภาพสถานะของ Process (State Diagram)" w={720} h={290}>
+                            <DBox x={30} y={130} w={130} h={60} title="New" sub="กำลังสร้าง" stroke="#94a3b8" />
+                            <DBox x={210} y={30} w={150} h={60} title="Ready" sub="รอคิวใช้ CPU" stroke="#60a5fa" />
+                            <DBox x={480} y={30} w={150} h={60} title="Running" sub="รันอยู่บน CPU" stroke="#4ade80" />
+                            <DBox x={650} y={130} w={70} h={60} title="จบ" sub="Terminated" stroke="#f87171" />
+                            <DBox x={480} y={220} w={150} h={60} title="Waiting" sub="รอ I/O (Blocked)" stroke="#eab308" />
+                            <DArrow x1={160} y1={155} x2={205} y2={85} color="#94a3b8" />
+                            <text x={118} y={95} textAnchor="middle" fill="#94a3b8" fontSize="10">ยอมรับเข้าระบบ</text>
+                            <DArrow x1={360} y1={60} x2={475} y2={60} color="#60a5fa" />
+                            <text x={417} y={48} textAnchor="middle" fill="#60a5fa" fontSize="10">เลือกโดย Dispatcher</text>
+                            <DArrow x1={485} y1={95} x2={360} y2={95} color="#f87171" />
+                            <text x={420} y={108} textAnchor="middle" fill="#f87171" fontSize="10">หมด Time Quantum</text>
+                            <text x={420} y={122} textAnchor="middle" fill="#f87171" fontSize="10">(สละ CPU เอง)</text>
+                            <DArrow x1={630} y1={80} x2={646} y2={125} color="#4ade80" />
+                            <text x={678} y={118} textAnchor="middle" fill="#4ade80" fontSize="10">เสร็จสิ้น</text>
+                            <DArrow x1={555} y1={92} x2={555} y2={215} color="#eab308" />
+                            <text x={567} y={158} textAnchor="middle" fill="#eab308" fontSize="10">รอ I/O</text>
+                            <DArrow x1={485} y1={245} x2={300} y2={98} color="#eab308" />
+                            <text x={358} y={178} textAnchor="middle" fill="#eab308" fontSize="10">I/O เสร็จ → กลับ Ready</text>
+                        </Diagram>
+                    </div>
+                    <Glossary terms={[
+                        ['Program vs Process', 'Program คือไฟล์โปรแกรมที่นอนนิ่ง ๆ บนดิสก์ ส่วน Process คือโปรแกรมที่ถูก "ปลุก" ให้รันแล้ว — ไฟล์เดียวเปิดได้หลาย Process'],
+                        ['Stack', 'พื้นที่เก็บตัวแปรชั่วคราวของแต่ละฟังก์ชัน ทำงานเสร็จก็เก็บคืนอัตโนมัติ'],
+                        ['Heap', 'พื้นที่สำหรับ "จอง" หน่วยความจำเพิ่มระหว่างรัน (malloc) โปรแกรมเป็นคนคืนเอง'],
+                        ['Global Variable', 'ตัวแปรที่ทุกส่วนของโปรแกรมเห็นร่วมกัน (อยู่ใน Data Section)'],
+                        ['Program Counter (PC)', 'เข็มชี้ว่ากำลังจะรันคำสั่งบรรทัดไหน เปลี่ยนไปเรื่อย ๆ ตามการทำงาน'],
+                        ['PCB', 'ไฟล์ประวัติส่วนตัวของแต่ละ Process ที่ OS จดไว้ (PID, สถานะ, ค่า Register)'],
+                        ['Ready State', 'สถานะ "ยืนรอคิว" ใช้ CPU — ทุกอย่างพร้อมแล้ว เหลือแค่รอเรียกตัว'],
+                        ['Waiting State', 'สถานะ "หลบไปรออุปกรณ์" เช่น รอดิสก์อ่านไฟล์เสร็จ ระหว่างนี้ไม่ต้องใช้ CPU']
+                    ]} />
+                </div>
+            ),
+            process2: (
+                <div className="space-y-6">
+                    <h2 className="text-3xl font-black text-blue-400 border-b border-slate-700 pb-2">4. Process Concept 2</h2>
+                    
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><i className="fa-solid fa-list-ol mr-2 text-blue-400"></i> Process Scheduling Queues</h3>
+                        <p className="text-sm text-slate-300 mb-2">เมื่อมี Process เกิดขึ้นเยอะๆ OS จะจัดกลุ่มพวกมันให้อยู่ในคิว (Queues) ต่างๆ:</p>
+                        <ul className="list-disc ml-6 space-y-1 text-sm text-slate-300">
+                            <li><Term word="Job Queue" def="คิวรวมของ Process ทั้งหมดในระบบ"><strong>Job Queue:</strong></Term> คิวของ Process ทั้งหมดในระบบ</li>
+                            <li><Term word="Ready Queue" def="คิวของ Process ที่พร้อมรัน เหลือแค่รอ CPU ว่าง"><strong>Ready Queue:</strong></Term> คิวของ Process ที่อยู่ใน Main Memory และ <u>พร้อมรัน</u> (รอ CPU ว่าง)</li>
+                            <li><Term word="Device Queue" def="คิวของ Process ที่กำลังรออุปกรณ์ I/O ทำงาน"><strong>Device Queue (Wait Queue):</strong></Term> คิวของ Process ที่กำลัง <u>รอ</u> อุปกรณ์ I/O ทำงาน</li>
+                        </ul>
+                        <Diagram title="แผนภาพคิวในระบบ (Queueing Diagram)" w={680} h={250}>
+                            <rect x={30} y={30} width={200} height={100} rx={10} fill="#0f172a" stroke="#60a5fa" strokeWidth={1.5} />
+                            <text x={130} y={50} textAnchor="middle" fill="#60a5fa" fontSize="11" fontWeight="bold">Ready Queue</text>
+                            {['P1', 'P2', 'P3', 'P4'].map((p, i) => (
+                                <g key={p}>
+                                    <rect x={48 + i * 47} y={62} width={40} height={30} rx={6} fill="#1e293b" stroke="#3b82f6" />
+                                    <text x={68 + i * 47} y={81} textAnchor="middle" fill="#e2e8f0" fontSize="11" fontWeight="bold">{p}</text>
+                                </g>
+                            ))}
+                            <text x={130} y={112} textAnchor="middle" fill="#64748b" fontSize="9.5">รอ CPU ว่าง</text>
+                            <DBox x={330} y={45} w={130} h={75} title="CPU" sub={["กำลังรัน Process"]} stroke="#4ade80" />
+                            <DArrow x1={230} y1={80} x2={325} y2={80} label="Dispatch" color="#4ade80" labelColor="#4ade80" />
+                            <DBox x={330} y={170} w={200} h={65} title="Device Queue" sub={["รอ Disk I/O ทำงานเสร็จ"]} stroke="#eab308" />
+                            <DArrow x1={395} y1={122} x2={395} y2={165} label="รอ I/O" color="#eab308" labelColor="#eab308" lx={35} />
+                            <DArrow x1={325} y1={200} x2={235} y2={105} dashed={true} label="I/O เสร็จ → กลับ Ready" color="#eab308" labelColor="#eab308" lx={-30} />
+                            <DArrow x1={325} y1={60} x2={235} y2={45} dashed={true} color="#f87171" />
+                            <text x={262} y={22} textAnchor="middle" fill="#f87171" fontSize="10">Time Quantum หมด</text>
+                        </Diagram>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-emerald-900/50">
+                        <h3 className="text-xl font-bold text-emerald-400 mb-3"><Term word="Context Switch" def="การหยุดงานเก่าเก็บสภาพ แล้วโหลดงานใหม่เข้าสู่ CPU"><i className="fa-solid fa-shuffle mr-2"></i> Context Switch</Term> (สับเปลี่ยน Process)</h3>
+                        <p className="text-sm text-slate-300 mb-3">เมื่อ CPU ต้องเปลี่ยนไปรัน Process ตัวอื่น ระบบจะต้อง <strong>"Save State"</strong> ของ Process เก่า และ <strong>"Load State"</strong> ของ Process ใหม่เข้าสู่ CPU</p>
+                        <ul className="list-disc ml-6 space-y-1 text-sm text-slate-300">
+                            <li>ข้อมูล State จะถูกเก็บไว้ใน <Term word="PCB" def="ไฟล์ประวัติส่วนตัวของแต่ละ Process ที่ OS จดไว้ (PID, สถานะ, ค่า Register)"><strong>PCB (Process Control Block)</strong></Term> ของแต่ละ Process (เช่น ค่า Register, Program Counter, สถานะ)</li>
+                            <li><strong>ข้อควรระวัง:</strong> เวลาที่ใช้ทำ Context Switch ถือเป็น <Term word="Overhead" def="งานที่เปลืองเวลาโดยไม่เกิดประโยชน์ เช่น เวลาที่ใช้สลับงาน"><u>Overhead (ความสูญเปล่า)</u></Term> เพราะในช่วงเวลานั้น ระบบไม่ได้ทำงานที่มีประโยชน์เลย</li>
+                        </ul>
+                    </div>
+                    <Glossary terms={[
+                        ['Queue', 'แถวคอย — เหมือนคิวซื้อข้าว ใครมาก่อนยืนก่อน ได้ใช้ทรัพยากรก่อน'],
+                        ['Ready Queue', 'คิวของ Process ที่พร้อมรันทุกอย่างแล้ว เหลือแค่รอ CPU ว่าง'],
+                        ['Device Queue', 'คิวของ Process ที่กำลังรออุปกรณ์ I/O (เช่น รอดิสก์อ่านไฟล์)'],
+                        ['Context Switch', 'การ "หยุดงานเก่า เก็บสภาพไว้ แล้วโหลดงานใหม่" ของ CPU — เหมือนส่งไม้ต่อนักวิ่งผลัด'],
+                        ['Overhead', 'งานที่เปลืองเวลา/ทรัพยากรโดยไม่เกิดประโยชน์โดยตรง เช่น เวลาที่ใช้สลับงาน'],
+                        ['Dispatcher', 'ตัวส่งงาน — ทำหน้าที่หยิบ Process จาก Ready Queue ส่งเข้า CPU จริง ๆ'],
+                        ['I/O', 'การรับ-ส่งข้อมูลกับอุปกรณ์ภายนอก (คีย์บอร์ด จอ ดิสก์) มักช้ากว่า CPU มาก']
+                    ]} />
+                </div>
+            ),
+            processmgmt: (
+                <div className="space-y-6">
+                    <h2 className="text-3xl font-black text-blue-400 border-b border-slate-700 pb-2">4. การจัดการ Process: fork(), exec(), exit(), wait()</h2>
+                    <p className="text-slate-300">บทนี้คือ <strong className="text-yellow-300">จุดชี้เป็นชี้ตายของข้อสอบ</strong> — อาจารย์เน้นให้ไล่โค้ดดูการทำงานทีละบรรทัด มีจุดหลอกเยอะ!</p>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-blue-900/50">
+                        <h3 className="text-xl font-bold text-white mb-3"><i className="fa-solid fa-eye mr-2 text-blue-400"></i> ภาพรวมทั้งชีวิตของ Process ในรูปเดียว</h3>
+                        <Diagram title="fork() → exec() → exit() → wait() พร้อม PID" w={720} h={380}>
+                            <DCode x={20} y={25} w={280} h={105} title="Parent — PID 100" stroke="#60a5fa"
+                                code={"pid_t pid = fork();\nif (pid > 0) {\n  wait(NULL);  // pid = 101\n}"} />
+                            <DCode x={420} y={25} w={280} h={105} title="Child — PID 101" stroke="#4ade80" titleColor="#86efac"
+                                code={"if (pid == 0) {\n  execlp(\"/bin/ls\", \"ls\", NULL);\n  exit(0);\n}"} />
+                            <DArrow x1={302} y1={70} x2={415} y2={70} color="#60a5fa" />
+                            <text x={360} y={12} textAnchor="middle" fill="#60a5fa" fontSize="10.5" fontWeight="bold">fork() คืน PID ของลูก (101) ให้แม่</text>
+                            <text x={360} y={24} textAnchor="middle" fill="#4ade80" fontSize="10.5" fontWeight="bold">และคืน 0 ให้ลูก</text>
+                            <DBox x={420} y={170} w={280} h={65} title="PID 101 → โปรแกรม /bin/ls" sub={["exec() ไม่สร้าง process ใหม่ — PID เดิม"]} stroke="#a78bfa" />
+                            <DArrow x1={560} y1={132} x2={560} y2={165} color="#a78bfa" />
+                            <text x={616} y={150} textAnchor="middle" fill="#a78bfa" fontSize="10">exec() แทนที่โปรแกรม</text>
+                            <DBox x={420} y={280} w={280} h={65} title="Zombie (PID 101)" sub={["exit() แล้ว PCB ค้างรอแม่"]} stroke="#f87171" />
+                            <DArrow x1={560} y1={238} x2={560} y2={275} color="#f87171" />
+                            <text x={596} y={260} textAnchor="middle" fill="#f87171" fontSize="10">exit()</text>
+                            <DArrow x1={250} y1={200} x2={425} y2={290} dashed={true} color="#eab308" />
+                            <text x={258} y={242} textAnchor="middle" fill="#eab308" fontSize="10">wait() เก็บสถานะ</text>
+                            <text x={258} y={256} textAnchor="middle" fill="#eab308" fontSize="10">→ กำจัด Zombie</text>
+                            <DBox x={60} y={170} w={190} h={60} title="Parent รันต่อ" sub={["wait() คืน PID = 101"]} stroke="#60a5fa" />
+                            <DArrow x1={155} y1={132} x2={155} y2={165} color="#60a5fa" />
+                        </Diagram>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><Term word="fork()" def="คำสั่งก๊อปปี้ตัวเอง สร้าง Process ลูกที่เหมือนแม่ทุกอย่าง แต่แยกกันอยู่คนละโลก"><i className="fa-solid fa-code-branch mr-2 text-blue-400"></i> fork()</Term> — สร้างลูก</h3>
+                        <ul className="list-disc ml-6 space-y-2 text-sm text-slate-300">
+                            <li>สร้าง Process ใหม่ (Child) ที่เป็น <strong>Copy ของ Parent</strong> ทั้ง Code, Data, Heap, Stack</li>
+                            <li><strong className="text-emerald-400">ค่าที่คืนกลับ (ต้องจำ!):</strong> Parent ได้ PID ของลูก (&gt; 0), Child ได้ 0, Error ได้ -1</li>
+                            <li>หลัง fork() ทั้งแม่และลูกจะรันโค้ดบรรทัดถัดไป <u>พร้อมกัน</u> — ลำดับการรันขึ้นกับ Scheduler (ไม่แน่นอน!)</li>
+                            <li>Memory แยกกันเด็ดขาด: ลูกแก้ตัวแปร ไม่กระทบแม่ (จริง ๆ ใช้เทคนิค Copy-on-Write เพื่อประหยัด)</li>
+                            <li>จำนวน process หลัง fork() n ครั้ง = 2<sup>n</sup> ตัว (กับดักยอดฮิต! ไม่ใช่ n+1)</li>
+                        </ul>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><i className="fa-solid fa-wand-magic-sparkles mr-2 text-purple-400"></i> exec() — แปลงร่าง</h3>
+                        <ul className="list-disc ml-6 space-y-2 text-sm text-slate-300">
+                            <li><strong>ไม่สร้าง Process ใหม่!</strong> แต่แทนที่ Memory Image ของ Process ปัจจุบันด้วยโปรแกรมใหม่ทั้งหมด (PID เดิม)</li>
+                            <li><Term word="exec()" def="คำสั่งแปลงร่าง เปลี่ยนโปรแกรมของ Process นี้เป็นโปรแกรมอื่นทันที (PID เดิม)">ตระกูล exec:</Term> <code className="text-yellow-300">execlp</code>, <code className="text-yellow-300">execvp</code>, <code className="text-yellow-300">execv</code>, <code className="text-yellow-300">execle</code> — ต่างกันที่วิธีส่ง argument (list vs array) และการระบุ path</li>
+                            <li><span className="text-red-400">จุดหลอก:</span> ถ้า exec() สำเร็จ โค้ดทุกบรรทัดที่อยู่หลัง exec() ใน process นั้นจะ<u>ไม่ถูกรันเลย</u> (โปรแกรมถูกแทนที่ไปแล้ว)</li>
+                            <li>คืนค่า -1 ก็ต่อเมื่อ exec ล้มเหลวเท่านั้น</li>
+                        </ul>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><Term word="exit()" def="คำสั่งจบชีวิตของ Process พร้อมส่งใบแจ้งตาย (status) ให้แม่รับทราบ"><i className="fa-solid fa-door-open mr-2 text-red-400"></i> exit()</Term> vs _exit()</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-300">
+                            <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                <strong className="text-red-300 block mb-1">exit(status)</strong>
+                                จบ process แบบ "สุภาพ" — <Term word="Buffer" def="ที่พักข้อมูลชั่วคราวก่อนปล่อยออกจอ/ไฟล์ exit() ล้างให้ แต่ _exit() ไม่ล้าง">เคลียร์ Buffer</Term> ทั้งหมด (stdout), ปิดไฟล์, คืนสถานะให้ Parent ทาง wait()
+                            </div>
+                            <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                <strong className="text-orange-300 block mb-1">_exit(status)</strong>
+                                จบแบบ "ทันที" — ไม่เคลียร์ Buffer! ข้อความที่ค้างใน stdout buffer อาจหายไปไม่ถูกพิมพ์
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><Term word="wait()" def="แม่ยืนรอจนกว่าลูกจะทำงานเสร็จ แล้วรับใบแจ้งตายของลูก"><i className="fa-solid fa-handshake mr-2 text-emerald-400"></i> wait()</Term> & waitpid()</h3>
+                        <ul className="list-disc ml-6 space-y-2 text-sm text-slate-300">
+                            <li><strong className="text-white">wait(NULL):</strong> Parent "หยุดรอ" (Block) จนกว่า Child <u>ตัวใดก็ได้</u> จบ แล้วคืน PID ของ Child ที่จบ</li>
+                            <li><strong className="text-white">waitpid(pid, &amp;status, options):</strong> ระบุได้ว่ารอ Child ตัวไหน ใช้ option <code className="text-yellow-300">WNOHANG</code> เพื่อ "เช็คโดยไม่รอ" (ถ้ายังไม่จบ คืน 0 ทันที)</li>
+                            <li>ถ้า Parent เรียก wait() ทั้งที่ไม่มี Child อยู่เลย → คืน -1 ทันที</li>
+                        </ul>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-red-900/50">
+                        <h3 className="text-xl font-bold text-red-400 mb-3"><i className="fa-solid fa-skull mr-2"></i> Zombie & Orphan (ออกสอบแน่นอน!)</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-300">
+                            <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                <Term word="Zombie" def="ลูกตายแล้วแต่แม่ยังไม่มารับรู้ ใบตาย (PCB) ค้างอยู่ในระบบ"><strong className="text-red-400 block mb-1">Zombie Process</strong></Term>
+                                ลูกจบแล้ว (เรียก exit) แต่<u>แม่ยังไม่เรียก wait()</u> → <Term word="PCB" def="ไฟล์ประวัติส่วนตัวของแต่ละ Process ที่ OS จดไว้">OS ยังเก็บ PCB</Term> (<Term word="PID" def="เลขบัตรประชาชนของแต่ละ Process">PID</Term>, exit status) ค้างไว้รอแม่มารับ
+                                <br/><span className="text-yellow-300">วิธีแก้: แม่ต้องเรียก wait()</span>
+                            </div>
+                            <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                <Term word="Orphan" def="ลูกกำพร้าที่แม่ตายก่อน ระบบส่ง init (PID 1) มารับเลี้ยงแทน"><strong className="text-purple-300 block mb-1">Orphan Process</strong></Term>
+                                แม่ตายก่อนลูก → ลูกถูกฝากให้ <strong>init / systemd (PID 1)</strong> รับเลี้ยง ซึ่ง init จะเรียก wait() ให้อัตโนมัติ ลูกจึงไม่ค้างเป็น Zombie
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700 text-sm text-slate-300">
+                        <h3 className="text-xl font-bold text-white mb-3"><i className="fa-solid fa-circle-stop mr-2 text-orange-400"></i> Process จบการทำงานด้วยวิธีใดได้บ้าง</h3>
+                        <ul className="list-disc ml-6 space-y-1">
+                            <li>เรียก <code className="text-yellow-300">exit()</code> หรือ <code className="text-yellow-300">_exit()</code></li>
+                            <li><code className="text-yellow-300">return</code> จาก main() (เทียบเท่า exit)</li>
+                            <li>ถูก signal ฆ่า (เช่น SIGKILL, SIGTERM)</li>
+                            <li>เกิด error/abort จนถูกบังคับจบ</li>
+                        </ul>
+                    </div>
+                    <Glossary terms={[
+                        ['PID', 'เลขประจำตัวของ Process เหมือนเลขบัตรประชาชน ใช้เรียกหา Process นั้น ๆ'],
+                        ['Parent / Child', 'แม่คือ Process ที่เรียก fork() สร้างใครขึ้นมา ส่วนลูกคือ Process ที่ถูกสร้างใหม่'],
+                        ['fork()', 'คำสั่ง "ก๊อปปี้ตัวเอง" — สร้าง Process ลูกที่เหมือนแม่ทุกอย่าง แต่แยกกันอยู่คนละโลก'],
+                        ['exec()', 'คำสั่ง "แปลงร่าง" — เปลี่ยนโปรแกรมของ Process นี้เป็นโปรแกรมอื่นทันที (PID เดิม)'],
+                        ['exit()', 'คำสั่ง "จบชีวิต" ของ Process พร้อมส่งใบแจ้งตาย (status) ให้แม่รับทราบ'],
+                        ['wait()', 'แม่ "ยืนรอ" หน้าประตูจนกว่าลูกจะทำงานเสร็จ แล้วรับใบแจ้งตายของลูก'],
+                        ['Zombie', 'วิญญาณค้าง — ลูกตายแล้วแต่แม่ยังไม่มารับรู้ ใบตาย (PCB) ค้างอยู่ในระบบ'],
+                        ['Orphan', 'ลูกกำพร้า — แม่ตายก่อนลูก ระบบจะส่ง init (PID 1) มารับเลี้ยงแทน'],
+                        ['Buffer', 'ที่พักข้อมูลชั่วคราวก่อนปล่อยออกจอ/ไฟล์ exit() จะล้างที่พักนี้ แต่ _exit() ไม่ล้าง']
+                    ]} />
+                </div>
+            ),
+            thread: (
+                <div className="space-y-6">
+                    <h2 className="text-3xl font-black text-blue-400 border-b border-slate-700 pb-2">5. Intro to Thread</h2>
+                    <p className="text-slate-300"><Term word="Thread" def="คนงานย่อยภายใน Process หลายคนช่วยกันทำงาน ใช้ทรัพยากรร่วมกัน"><strong>Thread (เธรด)</strong></Term> หรือ Lightweight Process เป็นหน่วยย่อยของการประมวลผลที่อยู่ภายใน Process จุดประสงค์คือเพื่อให้โปรแกรมสามารถทำงานขนานกันได้ (Concurrency) โดยใช้ทรัพยากรสิ้นเปลืองน้อยกว่าการแตก Process ใหม่</p>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700 flex flex-col md:flex-row gap-4">
+                        <div className="md:w-1/2">
+                            <h3 className="font-bold text-green-400 mb-2">สิ่งที่ Thread <u>แชร์ร่วมกัน</u> (Shared)</h3>
+                            <ul className="list-disc ml-6 text-sm text-slate-300 space-y-1">
+                                <li>Code Section (ชุดคำสั่ง)</li>
+                                <li>Data Section (ตัวแปร Global)</li>
+                                <li>OS Resources (เช่น ไฟล์ที่เปิดอยู่)</li>
+                            </ul>
+                        </div>
+                        <div className="md:w-1/2">
+                            <h3 className="font-bold text-red-400 mb-2">สิ่งที่ Thread <u>แยกกันเป็นของตัวเอง</u></h3>
+                            <ul className="list-disc ml-6 text-sm text-slate-300 space-y-1">
+                                <li>Thread ID</li>
+                                <li>Program Counter (PC)</li>
+                                <li>Registers</li>
+                                <li>Stack (เก็บ Local Variable ของใครของมัน)</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><i className="fa-solid fa-share-nodes mr-2 text-blue-400"></i> ภาพ: Thread แชร์อะไร? เก็บอะไรไว้กับตัว?</h3>
+                        <Diagram title="โครงสร้าง Process ที่มีหลาย Thread" w={680} h={280}>
+                            <rect x={25} y={15} width={630} height={250} rx={12} fill="#0f172a" stroke="#3b82f6" strokeWidth={1.5} />
+                            <text x={45} y={38} fill="#60a5fa" fontSize="12" fontWeight="bold">Process</text>
+                            <rect x={50} y={55} width={270} height={190} rx={8} fill="#1e293b" stroke="#4ade80" />
+                            <text x={185} y={78} textAnchor="middle" fill="#4ade80" fontSize="11" fontWeight="bold">สิ่งที่ทุก Thread แชร์กัน</text>
+                            <DBox x={70} y={92} w={230} h={40} title="Code (Text Section)" sub="" stroke="#64748b" titleSize={11} />
+                            <DBox x={70} y={140} w={230} h={40} title="Data (Global Variables)" sub="" stroke="#64748b" titleSize={11} />
+                            <DBox x={70} y={188} w={230} h={40} title="OS Resources (ไฟล์ที่เปิด)" sub="" stroke="#64748b" titleSize={11} />
+                            <DBox x={380} y={62} w={250} h={48} title="Thread 1" sub="PC, Registers, Stack ส่วนตัว" stroke="#a78bfa" />
+                            <DBox x={380} y={122} w={250} h={48} title="Thread 2" sub="PC, Registers, Stack ส่วนตัว" stroke="#a78bfa" />
+                            <DBox x={380} y={182} w={250} h={48} title="Thread 3" sub="PC, Registers, Stack ส่วนตัว" stroke="#a78bfa" />
+                            <DArrow x1={322} y1={110} x2={375} y2={86} dashed={true} color="#94a3b8" />
+                            <DArrow x1={322} y1={158} x2={375} y2={146} dashed={true} color="#94a3b8" />
+                            <DArrow x1={322} y1={208} x2={375} y2={206} dashed={true} color="#94a3b8" />
+                        </Diagram>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700 text-sm text-slate-300">
+                        <h3 className="text-xl font-bold text-white mb-3">Multithreading Models</h3>
+                        <ul className="space-y-2">
+                            <li><Term word="ULT" def="Thread ที่ OS ไม่รู้จัก จัดการกันเองระดับโปรแกรม บล็อกตัวเดียวตายยกทีม"><strong className="text-blue-300">User-Level Thread (ULT):</strong></Term> จัดการโดย Library ระดับผู้ใช้ (เช่น Pthreads, Java Threads) OS ไม่รู้จัก Thread เหล่านี้ <u>ข้อเสีย:</u> ถ้า Thread นึงบล็อก (เช่น รอ I/O) จะพา Thread อื่นใน Process เดียวกันบล็อกไปด้วยทั้งหมด</li>
+                            <li><Term word="KLT" def="Thread ที่ OS รู้จักและจัดการให้ บล็อกตัวหนึ่ง ตัวอื่นยังรันได้"><strong className="text-purple-300">Kernel-Level Thread (KLT):</strong></Term> OS เป็นคนจัดการ <u>ข้อดี:</u> ถ้า Thread นึงบล็อก Thread อื่นก็ยังรันได้บน CPU Core อื่น แต่กิน Overhead มากกว่า</li>
+                        </ul>
+                        <p className="mt-3 text-yellow-300"><i className="fa-solid fa-lightbulb"></i> <Term word="Thread Pool" def="จองคนงานไว้ล่วงหน้ากองหนึ่ง รอรับงาน ไม่ต้องสร้างใหม่ทุกครั้ง">ทริคสอบ: Thread Pool</Term> คือการสร้าง Thread ก้อนนึงเตรียมไว้ล่วงหน้า (Bounded size) เมื่อมีงานก็ดึง Thread จาก Pool ไปใช้ พอใช้เสร็จก็ส่งคืน ช่วยลด Overhead ในการจอง/ทำลาย Thread บ่อยๆ</p>
+                        <Diagram title="User-Level Threads (ULT) vs Kernel-Level Threads (KLT)" w={680} h={255}>
+                            <text x={170} y={30} textAnchor="middle" fill="#94a3b8" fontSize="12" fontWeight="bold">ULT — OS มองเห็นแค่ Process เดียว</text>
+                            <text x={510} y={30} textAnchor="middle" fill="#94a3b8" fontSize="12" fontWeight="bold">KLT — OS มองเห็นทุก Thread</text>
+                            <line x1={340} y1={15} x2={340} y2={240} stroke="#334155" strokeDasharray="6,4" />
+                            <DBox x={60} y={45} w={120} h={40} title="ULT 1" stroke="#a78bfa" />
+                            <DBox x={60} y={95} w={120} h={40} title="ULT 2" stroke="#a78bfa" />
+                            <DBox x={60} y={145} w={120} h={40} title="ULT 3" stroke="#a78bfa" />
+                            <DBox x={240} y={95} w={60} h={40} title="KLT" stroke="#4ade80" titleSize={11} />
+                            <DArrow x1={182} y1={65} x2={237} y2={95} color="#a78bfa" />
+                            <DArrow x1={182} y1={115} x2={237} y2={110} color="#a78bfa" />
+                            <DArrow x1={182} y1={165} x2={237} y2={125} color="#a78bfa" />
+                            <rect x={45} y={205} width={270} height={30} rx={6} fill="#1e293b" stroke="#4ade80" />
+                            <text x={180} y={224} textAnchor="middle" fill="#4ade80" fontSize="10.5">Kernel (เห็นแค่ 1 Kernel Thread)</text>
+                            <text x={180} y={252} textAnchor="middle" fill="#f87171" fontSize="9.5">บล็อก 1 ULT → พา ULT อื่นบล็อกหมด</text>
+                            <DBox x={390} y={45} w={100} h={40} title="ULT 1" stroke="#a78bfa" />
+                            <DBox x={390} y={95} w={100} h={40} title="ULT 2" stroke="#a78bfa" />
+                            <DBox x={390} y={145} w={100} h={40} title="ULT 3" stroke="#a78bfa" />
+                            <DBox x={540} y={45} w={100} h={40} title="KLT 1" stroke="#4ade80" titleSize={11} />
+                            <DBox x={540} y={95} w={100} h={40} title="KLT 2" stroke="#4ade80" titleSize={11} />
+                            <DBox x={540} y={145} w={100} h={40} title="KLT 3" stroke="#4ade80" titleSize={11} />
+                            <DArrow x1={492} y1={65} x2={536} y2={65} color="#a78bfa" />
+                            <DArrow x1={492} y1={115} x2={536} y2={115} color="#a78bfa" />
+                            <DArrow x1={492} y1={165} x2={536} y2={165} color="#a78bfa" />
+                            <rect x={380} y={205} width={270} height={30} rx={6} fill="#1e293b" stroke="#4ade80" />
+                            <text x={515} y={224} textAnchor="middle" fill="#4ade80" fontSize="10.5">Kernel (เห็นทุก Thread)</text>
+                            <text x={515} y={252} textAnchor="middle" fill="#4ade80" fontSize="9.5">บล็อก 1 ตัว → ตัวอื่นยังรันได้</text>
+                        </Diagram>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><i className="fa-solid fa-ban mr-2 text-red-400"></i> Thread Cancellation (การยกเลิก Thread)</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-300">
+                            <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                <Term word="Cancellation" def="การสั่งเลิกจ้าง Thread กลางคัน แบบรอเก็บของก่อนจบ (Deferred) หรือไล่ออกทันที (Asynchronous)"><strong className="text-red-400 block mb-1">Asynchronous Cancellation</strong></Term>
+                                ยกเลิก Thread เป้าหมาย<u>ทันทีทันใด</u> ไม่ให้โอกาสจัดการอะไร
+                                <br/><span className="text-red-400">อันตราย:</span> Thread อาจค้างอยู่กลางงานสำคัญ (ล็อกไฟล์, จอง memory) → ทรัพยากรรั่ว!
+                            </div>
+                            <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                <Term word="Cancellation" def="การสั่งเลิกจ้าง Thread กลางคัน แบบรอเก็บของก่อนจบ (Deferred) หรือไล่ออกทันที (Asynchronous)"><strong className="text-emerald-400 block mb-1">Deferred Cancellation</strong></Term>
+                                ตั้ง "ธง" ขอยกเลิกไว้ก่อน Thread เป้าหมายจะตรวจธง ณ จุดปลอดภัย (Cancellation Point) แล้วค่อยจบตัวเอง
+                                <br/><span className="text-green-400">ปลอดภัยกว่า:</span> Thread ได้เก็บกวาดทรัพยากรของตัวเองก่อนจบ
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><i className="fa-solid fa-code mr-2 text-blue-400"></i> Pthread vs Java Thread</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-300">
+                            <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                <Term word="Pthread" def="ไลบรารีสร้าง Thread สำหรับภาษา C บน Linux/Unix"><strong className="text-blue-300 block mb-1">Pthread (C)</strong></Term>
+                                <code className="text-yellow-300">pthread_create()</code> สร้าง, <code className="text-yellow-300">pthread_join()</code> รอ thread จบ (เหมือน wait ของ process), <code className="text-yellow-300">pthread_exit()</code> จบ thread
+                                <br/><span className="text-slate-400">คอมไพล์ต้องติด -lpthread</span>
+                            </div>
+                            <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                <strong className="text-purple-300 block mb-1">Java Thread</strong>
+                                สร้าง 2 วิธี: <code className="text-yellow-300">extends Thread</code> หรือ <code className="text-yellow-300">implements Runnable</code>
+                                <br/><span className="text-red-400">จุดหลอก:</span> ต้องเรียก <code className="text-yellow-300">start()</code> ถึงจะเกิด Thread ใหม่ ถ้าเรียก <code className="text-yellow-300">run()</code> ตรง ๆ จะเป็นแค่ Method ธรรมดา รันบน Thread เดิม!
+                                <br/><code className="text-yellow-300">join()</code> = รอ thread จบ, Priority กำหนดได้ 1-10 (ปกติ 5)
+                            </div>
+                        </div>
+                    </div>
+                    <Glossary terms={[
+                        ['Thread', 'คนงานย่อยภายใน Process หนึ่งตัว — หลายคนงานช่วยกันทำ ใช้ทรัพยากรร่วมกัน'],
+                        ['Concurrency', 'การทำงานหลายอย่าง "พร้อมกัน" (หรือสลับกันเร็วจนดูเหมือนพร้อมกัน)'],
+                        ['Process', 'เปรียบเป็น "โรงงาน" ที่มีคนงาน (Thread) ทำงานอยู่ข้างใน'],
+                        ['ULT', 'Thread ที่ OS ไม่รู้จัก — จัดการกันเองในระดับโปรแกรม ข้อเสียคือบล็อกทีเดียวตายยกทีม'],
+                        ['KLT', 'Thread ที่ OS รู้จักและจัดการให้โดยตรง — แข็งแรงกว่าแต่มีค่าใช้จ่ายมากกว่า'],
+                        ['Thread Pool', 'จองคนงานไว้ล่วงหน้าหนึ่งกอง รอรับงาน — หมดงานก็ไม่ไล่ออก งานใหม่มาก็ใช้ได้เลย'],
+                        ['Cancellation', 'การสั่ง "เลิกจ้าง" Thread กลางคัน — แบบรอให้เก็บของก่อนจบ (Deferred) หรือไล่ออกทันที (Asynchronous)'],
+                        ['Pthread', 'ไลบรารีสร้าง Thread สำหรับภาษา C (บน Linux/Unix)'],
+                        ['Race Condition', 'เมื่อหลาย Thread เขียนข้อมูลเดียวกันพร้อมกัน ผลลัพธ์ขึ้นกับ "ใครถึงก่อน" — บั๊กที่หายากที่สุด']
+                    ]} />
+                </div>
+            ),
+            scheduling: (
+                <div className="space-y-6">
+                    <h2 className="text-3xl font-black text-blue-400 border-b border-slate-700 pb-2">6. CPU Scheduling</h2>
+                    <p className="text-slate-300">เมื่อมี Process อยู่ใน Ready Queue หลายตัว <Term word="Scheduler" def="ผู้จัดคิว ตัดสินใจว่า Process ไหนจะได้ใช้ CPU ก่อน"><strong>Short-term Scheduler</strong></Term> (<Term word="Dispatcher" def="ตัวส่งงาน หยิบ Process จากคิวส่งเข้า CPU จริง ๆ">Dispatcher)</Term> ต้องตัดสินใจว่าจะเลือกใครเข้าไปรันใน CPU</p>
+
+                    <div className="grid grid-cols-2 gap-4 text-sm mb-4">
+                        <div className="bg-slate-800 p-4 rounded-xl border-l-4 border-red-500">
+                            <Term word="Non-preemptive" def="แย่ง CPU คืนไม่ได้ — งานที่ได้ CPU จะรันจนเสร็จหรือยอมปล่อยเอง"><strong className="text-white block mb-1">Non-preemptive</strong></Term>
+                            เมื่อ Process ได้ CPU แล้ว จะรันจนกว่าจะเสร็จ หรือยอมสละ CPU เอง OS แทรกแซงดึง CPU คืนไม่ได้
+                        </div>
+                        <div className="bg-slate-800 p-4 rounded-xl border-l-4 border-green-500">
+                            <Term word="Preemptive" def="แย่ง CPU คืนได้ — OS เรียกงานออกจาก CPU กลางคันได้ทุกเมื่อ"><strong className="text-white block mb-1">Preemptive</strong></Term>
+                            OS สามารถ "แย่ง (ขัดจังหวะ)" CPU คืนจาก Process ที่รันอยู่ได้ตามต้องการ (เช่น หมดเวลาโควต้า)
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-4">อัลกอริทึมยอดฮิต (เก็งข้อสอบ!)</h3>
+                        <div className="space-y-4 text-sm text-slate-300">
+                            <div>
+                                <strong className="text-blue-300 text-base block">1. FCFS (First-Come, First-Served)</strong>
+                                ใครมาก่อนได้ทำก่อน (Non-preemptive). <br/>
+                                <span className="text-red-400">ปัญหา (Trap):</span> <b>Convoy Effect</b> หากงานใหญ่มาก่อน งานเล็กๆ ข้างหลังจะรอนานมาก (Waiting time เฉลี่ยสูง)
+                            </div>
+                            <div>
+                                <strong className="text-blue-300 text-base block">2. SJF (Shortest Job First)</strong>
+                                <Term word="Burst Time" def="เวลาที่งานต้องใช้ CPU จนเสร็จ ไม่รวมเวลารอ I/O">ใครใช้เวลาทำ (Burst time)</Term> น้อยสุด ได้ทำก่อน (Non-preemptive). ให้ Waiting time เฉลี่ยต่ำที่สุด!
+                                <br/><span className="text-red-400">ปัญหา:</span> ในชีวิตจริง เราไม่รู้ล่วงหน้าว่า Process จะใช้เวลาเท่าไหร่
+                            </div>
+                            <div>
+                                <strong className="text-blue-300 text-base block">3. Priority Scheduling</strong>
+                                กำหนด "สิทธิ (Priority)" ใครสิทธิสูงกว่าได้ทำก่อน (เช่น Java Thread กำหนด 1-10)
+                                <br/><span className="text-red-400">ปัญหา (Trap):</span> <Term word="Starvation" def="งานอดตาย — ถูกงานอื่นแซงคิวตลอด ไม่ได้รันสักที"><b>Starvation (อดตาย)</b></Term> Process ที่สิทธิต่ำมากๆ อาจไม่ถูกเรียกเลยตลอดกาล!
+                                <br/><span className="text-green-400">ทางแก้:</span> <Term word="Aging" def="ค่อย ๆ เพิ่มสิทธิให้งานที่รอนาน ยิ่งรอยิ่งได้เปรียบ จนได้รัน"><b>Aging</b></Term> ค่อยๆ เพิ่มสิทธิให้ Process ที่รอนานๆ เมื่อเวลาผ่านไป
+                            </div>
+                            <div>
+                                <strong className="text-blue-300 text-base block">4. Round Robin (RR)</strong>
+                                จัดคิวแบบวนรอบ ทุกคนจะได้เวลาคนละนิด <Term word="Time Quantum" def="เวลา CPU ต่อรอบที่ Round Robin แบ่งให้แต่ละงาน">เรียกว่า <b>Time Quantum (q)</b></Term> (Preemptive). 
+                                เหมาะกับระบบ Interactive ที่ต้องการ Response time ที่ดี
+                                <br/><span className="text-yellow-400">จุดสังเกต:</span> ถ้า q มากไป จะกลายเป็น FCFS. ถ้า q น้อยไป Context Switch Overhead จะบานตะไท!
+                            </div>
+                            <div>
+                                <strong className="text-blue-300 text-base block">5. SRTF (Shortest Remaining Time First)</strong>
+                                เวอร์ชัน Preemptive ของ SJF — ทุกครั้งที่มี Process ใหม่มาถึง ระบบจะเทียบว่า "เวลาที่เหลือ (Remaining Time)" ของใครน้อยกว่า ถ้าน้องใหม่น้อยกว่าตัวที่รันอยู่ จะโดน <b>แย่ง CPU ทันที</b>
+                                <br/><span className="text-green-400">ข้อดี:</span> Average Waiting Time ต่ำที่สุด
+                                <br/><span className="text-red-400">ข้อเสีย:</span> Starvation + Overhead จาก Context Switch บ่อย
+                            </div>
+                            <div>
+                                <strong className="text-blue-300 text-base block">6. Multilevel Queue (MLQ)</strong>
+                                แบ่ง Ready Queue เป็นชั้น ๆ ตามประเภทงาน (เช่น งาน System, งาน Interactive, งาน Batch) แต่ละชั้นมี Algorithm ของตัวเอง
+                                <br/><span className="text-red-400">ข้อจำกัด:</span> Process จะ<u>ติดอยู่ชั้นเดิมตลอดชีวิต</u> ย้ายชั้นไม่ได้
+                            </div>
+                            <div>
+                                <strong className="text-blue-300 text-base block">7. Multilevel Feedback Queue (MLFQ)</strong>
+                                พัฒนาจาก MLQ — Process <b>ย้ายชั้นได้</b> ตามพฤติกรรม เช่น ใช้ CPU เยอะ (เกิน q) จะถูกลดชั้นลง ส่วน Process ที่รอนานจะถูกเลื่อนชั้นขึ้น (คล้าย Aging)
+                                <br/><span className="text-green-400">ฉลาดกว่า MLQ:</span> ปรับตัวตามพฤติกรรมของงานได้
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><i className="fa-solid fa-ruler mr-2 text-emerald-400"></i> เกณฑ์วัด Scheduling (จำสูตรให้ขึ้นใจ!)</h3>
+                        <ul className="list-disc ml-6 space-y-1 text-sm text-slate-300">
+                            <li><strong className="text-white">CPU Utilization:</strong> เปอร์เซ็นต์เวลาที่ CPU ทำงานจริง (อยากให้สูง)</li>
+                            <li><strong className="text-white">Throughput:</strong> จำนวน Process ที่เสร็จต่อหน่วยเวลา (อยากให้สูง)</li>
+                            <li><Term word="Turnaround Time" def="เวลารวมทั้งหมดตั้งแต่เข้ามาในระบบจนเสร็จ = เวลาเสร็จ − เวลามาถึง"><strong className="text-white">Turnaround Time (TAT):</strong></Term> เวลาทั้งหมดตั้งแต่เกิดจนเสร็จ = Completion Time − Arrival Time</li>
+                            <li><Term word="Waiting Time" def="เวลาที่งานรอเฉย ๆ ในคิว = TAT − Burst Time"><strong className="text-white">Waiting Time (WT):</strong></Term> เวลาที่รออยู่ใน Ready Queue = TAT − Burst Time</li>
+                            <li><Term word="Response Time" def="เวลาตั้งแต่ส่งงานจนได้เริ่มตอบสนองครั้งแรก สำคัญกับระบบ Interactive"><strong className="text-white">Response Time:</strong></Term> เวลาตั้งแต่ส่งงานจนได้ "เริ่ม" ตอบสนองครั้งแรก (สำคัญกับระบบ Interactive)</li>
+                        </ul>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-yellow-900/50">
+                        <h3 className="text-xl font-bold text-yellow-400 mb-4"><i className="fa-solid fa-calculator mr-2"></i> ฝึกคำนวณ (ข้อสอบคำนวณแน่นอน!)</h3>
+                        <div className="space-y-6 text-sm text-slate-300">
+                            <div>
+                                <p className="font-bold text-white mb-2">ตัวอย่างที่ 1: FCFS vs SJF — มี 4 งานมาพร้อมกัน (Arrival Time = 0)</p>
+                                <div className="flex flex-wrap gap-3 mb-3">
+                                    <span className="bg-slate-900 border border-blue-500/40 rounded px-3 py-1">P1: burst 6</span>
+                                    <span className="bg-slate-900 border border-green-500/40 rounded px-3 py-1">P2: burst 8</span>
+                                    <span className="bg-slate-900 border border-purple-500/40 rounded px-3 py-1">P3: burst 7</span>
+                                    <span className="bg-slate-900 border border-yellow-500/40 rounded px-3 py-1">P4: burst 3</span>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                        <strong className="text-blue-300 block mb-1">FCFS (เรียงตามลำดับมาก่อน)</strong>
+                                        Gantt: P1(6) → P2(8) → P3(7) → P4(3)
+                                        <br/>เสร็จที่: 6, 14, 21, 24
+                                        <br/>TAT: 6, 14, 21, 24 → เฉลี่ย 16.25
+                                        <br/>WT: 0, 6, 14, 21 → <strong className="text-red-400">เฉลี่ย 10.25</strong>
+                                    </div>
+                                    <div className="bg-slate-900 p-4 rounded border border-slate-700">
+                                        <strong className="text-green-300 block mb-1">SJF (สั้นสุดก่อน)</strong>
+                                        Gantt: P4(3) → P1(6) → P3(7) → P2(8)
+                                        <br/>เสร็จที่: 3, 9, 16, 24
+                                        <br/>TAT: 3, 9, 16, 24 → เฉลี่ย 13
+                                        <br/>WT: 0, 3, 9, 16 → <strong className="text-emerald-400">เฉลี่ย 7 (ดีกว่า FCFS)</strong>
+                                    </div>
+                                </div>
+                                <p className="font-bold text-white mt-2 mb-1">Gantt Chart เทียบกัน:</p>
+                                <Gantt
+                                    segments={[
+                                        { label: 'P1', start: 0, end: 6, color: '#60a5fa' },
+                                        { label: 'P2', start: 6, end: 14, color: '#4ade80' },
+                                        { label: 'P3', start: 14, end: 21, color: '#c084fc' },
+                                        { label: 'P4', start: 21, end: 24, color: '#facc15' }
+                                    ]}
+                                    ticks={[{ t: 0, label: '0' }, { t: 6, label: '6' }, { t: 14, label: '14' }, { t: 21, label: '21' }, { t: 24, label: '24' }]}
+                                />
+                                <Gantt
+                                    segments={[
+                                        { label: 'P4', start: 0, end: 3, color: '#facc15' },
+                                        { label: 'P1', start: 3, end: 9, color: '#60a5fa' },
+                                        { label: 'P3', start: 9, end: 16, color: '#c084fc' },
+                                        { label: 'P2', start: 16, end: 24, color: '#4ade80' }
+                                    ]}
+                                    ticks={[{ t: 0, label: '0' }, { t: 3, label: '3' }, { t: 9, label: '9' }, { t: 16, label: '16' }, { t: 24, label: '24' }]}
+                                />
+                            </div>
+
+                            <div>
+                                <p className="font-bold text-white mb-2">ตัวอย่างที่ 2: Round Robin (q = 4) — P1=24, P2=3, P3=3 (มาพร้อมกัน)</p>
+                                <div className="bg-slate-900 p-4 rounded border border-slate-700 mb-3">
+                                    <strong className="text-blue-300 block mb-1">ลำดับการรัน (ไล่ Gantt ทีละ q)</strong>
+                                    P1(0-4) → P2(4-7) → P3(7-10) → P1(10-14) → P1(14-18) → P1(18-22) → P1(22-26) → P1(26-30)
+                                    <br/>P2 หมดที่ 7, P3 หมดที่ 10, P1 หมดที่ 30
+                                </div>
+                                <ul className="list-disc ml-6 space-y-1">
+                                    <li>TAT: P1 = 30, P2 = 7, P3 = 10 → เฉลี่ย 15.67</li>
+                                    <li>WT = TAT − Burst: P1 = 6, P2 = 4, P3 = 7 → เฉลี่ย 5.67</li>
+                                    <li><span className="text-yellow-300">ข้อสังเกต:</span> RR ช่วยให้งานสั้นเสร็จเร็ว (Response ดี) แต่งานยาวถูกยืดออก</li>
+                                </ul>
+                                <Gantt
+                                    segments={[
+                                        { label: 'P1', start: 0, end: 4, color: '#60a5fa' },
+                                        { label: 'P2', start: 4, end: 7, color: '#4ade80' },
+                                        { label: 'P3', start: 7, end: 10, color: '#c084fc' },
+                                        { label: 'P1', start: 10, end: 14, color: '#60a5fa' },
+                                        { label: 'P1', start: 14, end: 18, color: '#60a5fa' },
+                                        { label: 'P1', start: 18, end: 22, color: '#60a5fa' },
+                                        { label: 'P1', start: 22, end: 26, color: '#60a5fa' },
+                                        { label: 'P1', start: 26, end: 30, color: '#60a5fa' }
+                                    ]}
+                                    ticks={[{ t: 0, label: '0' }, { t: 4, label: '4' }, { t: 7, label: '7' }, { t: 10, label: '10' }, { t: 14, label: '14' }, { t: 18, label: '18' }, { t: 22, label: '22' }, { t: 26, label: '26' }, { t: 30, label: '30' }]}
+                                />
+                            </div>
+
+                            <div>
+                                <p className="font-bold text-white mb-2">ตัวอย่างที่ 3: SRTF — <Term word="Arrival Time" def="เวลาที่งานโผล่เข้ามาในระบบ ข้อสอบบางข้อให้มาคนละเวลา ต้องระวัง">Arrival Time</Term> ไม่พร้อมกัน (จุดหลอกยอดฮิต!)</p>
+                                <div className="flex flex-wrap gap-3 mb-3">
+                                    <span className="bg-slate-900 border border-blue-500/40 rounded px-3 py-1">P1: arrive 0, burst 8</span>
+                                    <span className="bg-slate-900 border border-green-500/40 rounded px-3 py-1">P2: arrive 1, burst 4</span>
+                                    <span className="bg-slate-900 border border-purple-500/40 rounded px-3 py-1">P3: arrive 2, burst 9</span>
+                                    <span className="bg-slate-900 border border-yellow-500/40 rounded px-3 py-1">P4: arrive 3, burst 5</span>
+                                </div>
+                                <div className="bg-slate-900 p-4 rounded border border-slate-700 mb-3">
+                                    <strong className="text-purple-300 block mb-1">วิธีไล่: ทุกจุดที่มีงานใหม่มา ให้ถามว่า "เหลือใครน้อยสุด?"</strong>
+                                    P1(0-1) → P2 มาแทรก(1-5) → P4 มาแทรก(5-10) → P1 ต่อ(10-17) → P3(17-26)
+                                </div>
+                                <ul className="list-disc ml-6 space-y-1">
+                                    <li>เสร็จที่: P1=17, P2=5, P3=26, P4=10</li>
+                                    <li>TAT: 17, 4, 24, 7 → เฉลี่ย 13</li>
+                                    <li>WT: 9, 0, 15, 2 → เฉลี่ย 6.5</li>
+                                    <li><span className="text-red-400">ระวัง!</span> หลายคนลืมว่า SRTF ต้องตัดสินใจใหม่ทุกครั้งที่มีงานใหม่ "มาถึง" ไม่ใช่เฉพาะตอนรันเสร็จ</li>
+                                </ul>
+                                <Gantt
+                                    segments={[
+                                        { label: 'P1', start: 0, end: 1, color: '#60a5fa' },
+                                        { label: 'P2', start: 1, end: 5, color: '#4ade80' },
+                                        { label: 'P4', start: 5, end: 10, color: '#facc15' },
+                                        { label: 'P1', start: 10, end: 17, color: '#60a5fa' },
+                                        { label: 'P3', start: 17, end: 26, color: '#c084fc' }
+                                    ]}
+                                    ticks={[{ t: 0, label: '0' }, { t: 1, label: '1' }, { t: 5, label: '5' }, { t: 10, label: '10' }, { t: 17, label: '17' }, { t: 26, label: '26' }]}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                    <Glossary terms={[
+                        ['Scheduler', 'ผู้จัดคิว — ตัดสินใจว่า Process ไหนจะได้ใช้ CPU ก่อน'],
+                        ['Burst Time', 'เวลาที่งานต้องใช้ CPU จนเสร็จ (ไม่รวมเวลารอ I/O)'],
+                        ['Arrival Time', 'เวลาที่งาน "โผล่เข้ามา" ในระบบ — ข้อสอบบางข้อให้มาคนละเวลา ต้องระวัง'],
+                        ['Preemptive', 'แย่ง CPU คืนได้ — OS เรียกงานออกจาก CPU กลางคันได้ทุกเมื่อ'],
+                        ['Non-preemptive', 'แย่งไม่ได้ — งานที่ได้ CPU แล้วจะรันจนเสร็จ หรือยอมปล่อยเอง'],
+                        ['Turnaround Time', 'เวลารวมทั้งหมดตั้งแต่เข้ามาในระบบจนทำงานเสร็จ = เวลาเสร็จ − เวลามาถึง'],
+                        ['Waiting Time', 'เวลาที่งาน "รอเฉย ๆ" ในคิวโดยไม่ได้ทำอะไร = TAT − Burst Time'],
+                        ['Time Quantum (q)', 'เวลา CPU ต่อรอบที่ Round Robin แบ่งให้แต่ละงาน'],
+                        ['Starvation', 'งาน "อดตาย" — ถูกงานอื่นแซงคิวตลอด ไม่ได้รันสักที'],
+                        ['Aging', 'ทางแก้ — ค่อย ๆ เพิ่มสิทธิให้งานที่รอนาน ยิ่งรอยิ่งได้เปรียบ จนได้รัน']
+                    ]} />
+                </div>
+            ),
+            strategy: (
+                <div className="space-y-6">
+                    <h2 className="text-3xl font-black text-yellow-400 border-b border-slate-700 pb-2"><i className="fa-solid fa-crosshairs mr-3"></i> กลยุทธ์ทำข้อสอบ Midterm</h2>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><i className="fa-solid fa-clipboard-list mr-2 text-blue-400"></i> รูปแบบข้อสอบ</h3>
+                        <ul className="list-disc ml-6 space-y-2 text-sm text-slate-300">
+                            <li>ปรนัยหลายตัวเลือก + <strong>ตัวเลือก 2 ตัว (ถูก/ผิด)</strong> + เติมคำตอบ (ส่วนมากเป็นตัวเลขหรือคำสั้น ๆ)</li>
+                            <li>ข้อสอบ<strong className="text-yellow-300">เยอะมาก เน้นความเร็ว</strong> — เวลา 3 ชั่วโมงอาจน้อยไปนิด!</li>
+                            <li>ออกครบทุกเรื่องที่เรียน (ถ้าเรื่องไหนไม่ออก อาจารย์จะบอกเอง)</li>
+                        </ul>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-red-900/50">
+                        <h3 className="text-xl font-bold text-red-400 mb-3"><i className="fa-solid fa-triangle-exclamation mr-2"></i> ระบบคะแนน Part ถูก/ผิด (คิดก่อนตอบ!!)</h3>
+                        <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                            <div className="bg-emerald-900/30 border border-emerald-700 rounded-lg p-4">
+                                <div className="text-3xl font-black text-emerald-400">+2</div>
+                                <div className="text-slate-300 mt-1">ตอบถูก</div>
+                            </div>
+                            <div className="bg-red-900/30 border border-red-700 rounded-lg p-4">
+                                <div className="text-3xl font-black text-red-400">-1</div>
+                                <div className="text-slate-300 mt-1">ตอบผิด</div>
+                            </div>
+                            <div className="bg-slate-900 border border-slate-600 rounded-lg p-4">
+                                <div className="text-3xl font-black text-slate-300">0</div>
+                                <div className="text-slate-300 mt-1">ไม่ตอบ</div>
+                            </div>
+                        </div>
+                        <p className="text-sm text-slate-300 mt-4"><i className="fa-solid fa-lightbulb text-yellow-300"></i> <strong>หลักการตัดสินใจ:</strong> ถ้า "เดา" แล้วมีโอกาสถูกเกิน 1 ใน 3 (33%) การเดายังคุ้มกว่าเว้นว่าง — เพราะถูกได้ +2 แต่ผิดเสียแค่ -1</p>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><i className="fa-solid fa-book-open mr-2 text-emerald-400"></i> สอบแบบ Open Book — ใช้สิทธิให้คุ้ม</h3>
+                        <ul className="list-disc ml-6 space-y-2 text-sm text-slate-300">
+                            <li>เอา Handout, ชีทอื่น ๆ และ Quiz Solution เข้าได้เลย</li>
+                            <li><span className="text-red-400">อย่าเสียเวลาเปิดชีททุกข้อ!</span> ส่วนใหญ่ทำไม่ทันเพราะมัวแต่เปิดหา — ควรจดสรุปย่อ (Cheat Sheet) ไว้ 1-2 แผ่น แล้วเปิดเฉพาะข้อที่ไม่แน่ใจ</li>
+                            <li>ออกสอบเรื่องไล่โค้ด / ไล่การ fork() → <strong>เอา Source Code พร้อมผลการรันจาก Classroom เข้าไปด้วย</strong> มีจุดหลอกเยอะ ถ้าไม่แม่น เปิดเทียบได้เลย</li>
+                            <li>มีการคำนวณ CPU Scheduling → เตรียมกระดาษทด + จดสูตร WT/TAT ไว้ในสรุป</li>
+                        </ul>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><i className="fa-solid fa-bug mr-2 text-purple-400"></i> กับดักข้อสอบที่เจอบ่อย</h3>
+                        <ul className="list-disc ml-6 space-y-2 text-sm text-slate-300">
+                            <li><strong className="text-red-400">"ตอบว่า Error" — อย่า!</strong> โค้ดทุกข้อ Compile ผ่านหมด ไม่มีข้อไหน Error</li>
+                            <li>fork() n ครั้ง = 2<sup>n</sup> process ไม่ใช่ n+1 — อย่าลืมนับ Parent ด้วย</li>
+                            <li>Memory ของ Parent/Child แยกกัน — ลูกแก้ตัวแปรไม่กระทบแม่</li>
+                            <li>exec() ไม่สร้าง process ใหม่ และโค้ดหลัง exec() ไม่ถูกรัน (ถ้า exec สำเร็จ)</li>
+                            <li>SRTF ต้องเช็ค "งานใหม่มาถึง" ทุกจังหวะ ไม่ใช่แค่ตอนงานรันเสร็จ</li>
+                            <li>โจทย์ถูก/ผิด ชอบใช้คำ "เสมอ/ทุกครั้ง/ไม่เคย" — ถ้าคิดข้อยกเว้นได้แม้กรณีเดียว ตอบ "ผิด"</li>
+                        </ul>
+                    </div>
+
+                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                        <h3 className="text-xl font-bold text-white mb-3"><i className="fa-solid fa-stopwatch mr-2 text-yellow-400"></i> การบริหารเวลาในห้องสอบ</h3>
+                        <ol className="list-decimal ml-6 space-y-2 text-sm text-slate-300">
+                            <li>ทำข้อที่มั่นใจ / ไม่ต้องเปิดชีทก่อน (เก็บคะแนนชัวร์ ๆ)</li>
+                            <li>ข้อคำนวณ CPU Scheduling: ฝึกทำเร็ว ๆ มาก่อนเข้าห้องสอบ เพราะกินเวลาสุด</li>
+                            <li>ข้อไล่โค้ด: จดลำดับการรันทีละบรรทัด อย่าคิดในหัว ผิดพลาดง่าย</li>
+                            <li>เหลือเวลา → ค่อยกลับมาเปิดชีทกับข้อที่เว้นไว้</li>
+                            <li>ไม่แน่ใจข้อถูก/ผิด: เดาเมื่อพอมีเหตุผล (คุ้มกว่าเว้นว่างถ้าโอกาสถูก &gt; 33%)</li>
+                        </ol>
+                    </div>
+                </div>
+            )
+        };
+
+        // --- Interactive Animation Component ---
+        const ProcessAnimation = () => {
+            const [step, setStep] = useState(0);
+
+            const steps = [
+                {
+                    title: "เริ่มต้น (Before Fork)",
+                    desc: "ระบบมีเพียงโปรแกรมหลักทำงานอยู่ เรียกว่า Parent Process (PID=100) ตัวแปร x เก็บค่า 10",
+                    parentState: "Running", childState: null,
+                    pCodeHighlight: 0,
+                    pText: "Parent (PID=100)\nCode: main()\nVars: x = 10",
+                    cText: null
+                },
+                {
+                    title: "สร้างลูก (Fork)",
+                    desc: "Parent เรียก fork() ระบบก๊อปปี้ทุกอย่างสร้าง Child Process (PID=101) แต่แยก Memory กันอย่างเด็ดขาด! fork() คืนค่า 101 ให้แม่ และคืน 0 ให้ลูก",
+                    parentState: "Running", childState: "Ready",
+                    pCodeHighlight: 1,
+                    pText: "Parent (PID=100)\nCode: main()\nVars: x = 10\npid = 101",
+                    cText: "Child (PID=101)\nCode: main()\nVars: x = 10\npid = 0"
+                },
+                {
+                    title: "ลูกแปลงร่าง (Exec)",
+                    desc: "Child ตรวจพบว่าตัวเองมี pid=0 จึงเข้าไปทำงานใน block exec() มันจะถูก 'ผีสิง' เปลี่ยนโปรแกรมเดิมเป็นคำสั่ง '/bin/ls' ทันที",
+                    parentState: "Waiting", childState: "Running (Exec)",
+                    pCodeHighlight: 8, // Parent going to wait
+                    pText: "Parent (PID=100)\nStatus: Blocked\nWaiting for child...",
+                    cText: "Child (PID=101)\n[TRANSFORMED!]\nCode: /bin/ls\nExecuting command..."
+                },
+                {
+                    title: "ลูกจบการทำงาน (Exit & Zombie)",
+                    desc: "Child ทำคำสั่ง ls เสร็จสิ้น และเรียก exit() เพื่อคืนทรัพยากร แต่! PCB ยังค้างอยู่ในระบบ กลายเป็น Zombie Process ชั่วคราว",
+                    parentState: "Waiting", childState: "Zombie",
+                    pCodeHighlight: 8,
+                    pText: "Parent (PID=100)\nStatus: Blocked\nwait(&status)",
+                    cText: "☠️ Zombie (PID=101)\nDead but PCB exists.\nStatus code: 0"
+                },
+                {
+                    title: "แม่รับสถานะลูก (Wait returns)",
+                    desc: "คำสั่ง wait() ของ Parent ตรวจพบการตายของลูก จึงดึงสถานะมาเก็บไว้ ระบบกำจัด Zombie ทิ้งไป Parent กลับมารันต่อ",
+                    parentState: "Running", childState: null, // Cleared
+                    pCodeHighlight: 9,
+                    pText: "Parent (PID=100)\nwait() returns 101\nPrinting complete.",
+                    cText: null
+                }
+            ];
+
+            const current = steps[step];
+
+            const codeSnippet = `int x = 10;
+pid_t pid = fork();
+
+if (pid == 0) { 
+    // โค้ดของลูก
+    execlp("/bin/ls", "ls", NULL);
+    exit(0); // โค้ดนี้จะไม่ถูกรันถ้า exec สำเร็จ
+} 
+else if (pid > 0) { 
+    // โค้ดของแม่
+    wait(NULL); 
+    printf("Child Complete\\n");
+}`;
+
+            return (
+                <div className="space-y-6 animate-fade-in">
+                    <h2 className="text-3xl font-black text-blue-400 border-b border-slate-700 pb-2 flex items-center">
+                        <i className="fa-solid fa-film mr-3"></i> Step-by-Step Animation: The Process Lifecycle
+                    </h2>
+                    
+                    <div className="flex flex-col lg:flex-row gap-6">
+                        {/* Code Panel */}
+                        <div className="lg:w-1/3">
+                            <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-xl">
+                                <div className="bg-slate-800 px-4 py-2 border-b border-slate-700 font-mono text-sm text-slate-300">fork_exec_wait.c</div>
+                                <div className="p-4 font-mono text-xs text-slate-400 whitespace-pre-wrap leading-loose">
+                                    {codeSnippet.split('\n').map((line, i) => {
+                                        // Simple highlight matcher based on current step
+                                        let isHighlight = false;
+                                        if (step === 0 && i === 0) isHighlight = true;
+                                        if (step === 1 && i === 1) isHighlight = true;
+                                        if (step === 2 && i === 5) isHighlight = true;
+                                        if (step === 3 && i === 6) isHighlight = true;
+                                        if (step === 4 && i >= 9) isHighlight = true;
+
+                                        return (
+                                            <div key={i} className={`px-2 rounded ${isHighlight ? 'bg-blue-600/30 border-l-2 border-blue-400 text-white' : ''}`}>
+                                                {line}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Animation Panel */}
+                        <div className="lg:w-2/3 bg-slate-900 rounded-xl border border-slate-700 p-6 shadow-xl flex flex-col relative overflow-hidden">
+                            <div className="text-center mb-6">
+                                <h3 className="text-xl font-bold text-white mb-2">{current.title}</h3>
+                                <p className="text-slate-400 text-sm h-10">{current.desc}</p>
+                            </div>
+
+                            <div className="flex-1 flex justify-center items-center gap-8 relative min-h-[250px]">
+                                {/* Parent Box */}
+                                <div className="process-box z-10 w-48 bg-slate-800 border-2 border-blue-500 rounded-lg p-4 shadow-lg shadow-blue-500/20">
+                                    <div className="text-center font-black text-blue-400 border-b border-slate-600 pb-2 mb-2"><i className="fa-solid fa-user-tie"></i> Parent Process</div>
+                                    <div className="font-mono text-xs whitespace-pre-wrap text-slate-300">{current.pText}</div>
+                                </div>
+
+                                {/* Fork Arrow */}
+                                {step >= 1 && step < 4 && (
+                                    <div className="z-0 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-slate-500 flex flex-col items-center">
+                                        <div className="text-xs mb-1">fork()</div>
+                                        <i className="fa-solid fa-arrow-right-long text-2xl text-blue-500/50"></i>
+                                    </div>
+                                )}
+
+                                {/* Child Box */}
+                                {current.cText && (
+                                    <div className={`process-box z-10 w-48 rounded-lg p-4 shadow-lg 
+                                        ${step === 2 ? 'exec-state text-white' : 'bg-slate-800 border-2 border-green-500 shadow-green-500/20 text-slate-300'}
+                                        ${step === 3 ? 'zombie-state' : ''}
+                                    `}>
+                                        <div className={`text-center font-black pb-2 mb-2 border-b ${step===2 ? 'border-white/30':'border-slate-600 text-green-400'}`}>
+                                            {step === 3 ? <i className="fa-solid fa-skull"></i> : <i className="fa-solid fa-child"></i>} Child Process
+                                        </div>
+                                        <div className="font-mono text-xs whitespace-pre-wrap">{current.cText}</div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Controls */}
+                            <div className="mt-8 flex justify-between items-center bg-slate-800 p-3 rounded-lg border border-slate-700">
+                                <button onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded disabled:opacity-50 text-sm font-bold transition">
+                                    <i className="fa-solid fa-chevron-left mr-2"></i> ก่อนหน้า
+                                </button>
+                                <div className="flex gap-2">
+                                    {steps.map((_, i) => (
+                                        <div key={i} className={`w-3 h-3 rounded-full ${i === step ? 'bg-blue-500' : 'bg-slate-600'}`}></div>
+                                    ))}
+                                </div>
+                                <button onClick={() => setStep(Math.min(steps.length - 1, step + 1))} disabled={step === steps.length - 1} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded disabled:opacity-50 text-sm font-bold transition">
+                                    ถัดไป <i className="fa-solid fa-chevron-right ml-2"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Mock Exam Component ---
+        const Quiz = () => {
+            const questions = [
+                {
+                    q: "The Fork Bomb: โค้ดต่อไปนี้ จะมีคำว่า 'Hello OS' พิมพ์ออกมากี่บรรทัด?\n\nint main() {\n  fork();\n  fork();\n  fork();\n  printf(\"Hello OS\\n\");\n}",
+                    options: ["3 บรรทัด", "4 บรรทัด", "6 บรรทัด", "8 บรรทัด"],
+                    ans: 3,
+                    exp: "การเรียก fork() 3 ครั้งติดต่อกัน จะสร้างโปรเซสแบบทวีคูณ (2^n) = 2^3 = 8 Process ทุุกตัวจะวิ่งไปถึงบรรทัด printf จึงได้ผลลัพธ์ 8 บรรทัด"
+                },
+                {
+                    q: "ตัวแปรหลัง fork(): ผลลัพธ์สุดท้ายที่ Parent พิมพ์ออกมาคืออะไร?\n\nint count = 10;\nint main() {\n  if (fork() == 0) {\n    count += 5;\n    exit(0);\n  } else {\n    wait(NULL);\n    printf(\"%d\", count);\n  }\n}",
+                    options: ["10", "15", "เกิด Error (Race condition)", "ค่าขยะ (Garbage value)"],
+                    ans: 0,
+                    exp: "Trick สำคัญ! Memory ของ Parent และ Child จะ 'แยกจากกันโดยเด็ดขาด' หลัง fork() ลูกเปลี่ยน count = 15 แต่ในฝั่งของแม่ count ยังเป็น 10 เหมือนเดิม!"
+                },
+                {
+                    q: "จากอัลกอริทึม CPU Scheduling ข้อใดคือสาเหตุที่ทำให้เกิดปัญหา Starvation (อดตาย)?",
+                    options: [
+                        "FCFS: Process ตัวใหญ่รันนานเกินไปจนตัวอื่นต้องรอ", 
+                        "Round Robin: Time Quantum น้อยเกินไป เกิด Overhead", 
+                        "Priority: มี Process สิทธิสูงส่งเข้ามาในระบบเรื่อยๆ จนตัวสิทธิต่ำไม่ได้เกิด", 
+                        "SJF: ไม่สามารถคาดเดา Burst Time ล่วงหน้าได้"
+                    ],
+                    ans: 2,
+                    exp: "Starvation เกิดใน Priority Scheduling (และ SRTF/SJF บางกรณี) เมื่อ Process สิทธิต่ำถูก Process ใหม่ที่สิทธิสูงกว่าแย่งคิวไปเรื่อยๆ จนไม่ได้รัน วิธีแก้คือการทำ Aging"
+                },
+                {
+                    q: "การเกิด Zombie Process มีสาเหตุมาจากอะไร?",
+                    options: [
+                        "ลูก (Child) พยายามเข้าใช้งาน Memory ที่ไม่ได้รับอนุญาต (Segmentation Fault)", 
+                        "แม่ (Parent) ถูก Terminate ไปก่อนที่ลูกจะทำงานเสร็จ", 
+                        "ลูก (Child) เรียก exit() แล้ว แต่แม่ (Parent) ยังไม่ได้เรียก wait() เพื่อรับ Status", 
+                        "ลูก (Child) โดนผีสิงด้วยคำสั่ง exec() จนหาทางกลับไม่ได้"
+                    ],
+                    ans: 2,
+                    exp: "เมื่อลูกตาย (exit) OS จะยังไม่ทำลายโครงสร้าง PCB ทิ้งทั้งหมด จนกว่าแม่จะยอมมารับรู้การตายผ่านคำสั่ง wait() ช่วงที่รอแม่นี้ ลูกจะอยู่ในสถานะ Zombie"
+                }
+            ];
+
+            const [currentQ, setCurrentQ] = useState(0);
+            const [selected, setSelected] = useState(null);
+            const [showExp, setShowExp] = useState(false);
+            const [score, setScore] = useState(0);
+            const [finished, setFinished] = useState(false);
+
+            const handleAns = (idx) => {
+                if (showExp) return;
+                setSelected(idx);
+                setShowExp(true);
+                if (idx === questions[currentQ].ans) setScore(score + 1);
+            };
+
+            const nextQ = () => {
+                if (currentQ < questions.length - 1) {
+                    setCurrentQ(currentQ + 1); setSelected(null); setShowExp(false);
+                } else {
+                    setFinished(true);
+                }
+            };
+
+            if (finished) {
+                return (
+                    <div className="bg-slate-800 p-10 rounded-xl text-center border border-slate-700 shadow-2xl animate-fade-in max-w-2xl mx-auto">
+                        <h2 className="text-4xl font-black text-white mb-6">สอบเสร็จแล้ว! 🎉</h2>
+                        <div className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400 mb-6">{score} / {questions.length}</div>
+                        <p className="text-slate-300 text-lg mb-8">
+                            {score === questions.length ? 'สมบูรณ์แบบ! คุณพร้อมทะลวงข้อสอบ Midterm แล้ว!' : 'พลาดไปนิดเดียว กลับไปทบทวนในบทเรียนอีกรอบนะครับ รับรองแม่นแน่นอน!'}
+                        </p>
+                        <button onClick={() => {setFinished(false); setCurrentQ(0); setScore(0); setSelected(null); setShowExp(false);}} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-full transition shadow-lg">
+                            ลองทำใหม่อีกครั้ง
+                        </button>
+                    </div>
+                );
+            }
+
+            const q = questions[currentQ];
+
+            return (
+                <div className="bg-slate-800 p-8 rounded-xl border border-slate-700 shadow-2xl max-w-3xl mx-auto animate-fade-in">
+                    <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-700">
+                        <span className="text-blue-400 font-bold bg-blue-900/30 px-3 py-1 rounded">Question {currentQ + 1} / {questions.length}</span>
+                        <span className="text-slate-400 font-bold">Score: <span className="text-emerald-400">{score}</span></span>
+                    </div>
+                    
+                    <h3 className="text-xl text-white font-semibold mb-6 whitespace-pre-wrap leading-relaxed">{q.q}</h3>
+                    
+                    <div className="space-y-3 mb-8">
+                        {q.options.map((opt, idx) => {
+                            let btnClass = "w-full text-left p-4 rounded-lg border-2 transition-all duration-200 font-medium ";
+                            if (!showExp) {
+                                btnClass += "border-slate-700 hover:border-blue-500 bg-slate-900/50 hover:bg-slate-700 text-slate-300";
+                            } else {
+                                if (idx === q.ans) {
+                                    btnClass += "border-emerald-500 bg-emerald-900/20 text-emerald-300";
+                                } else if (idx === selected) {
+                                    btnClass += "border-red-500 bg-red-900/20 text-red-300";
+                                } else {
+                                    btnClass += "border-slate-800 bg-slate-900/30 text-slate-600 opacity-50";
+                                }
+                            }
+                            return (
+                                <button key={idx} onClick={() => handleAns(idx)} disabled={showExp} className={btnClass}>
+                                    <span className="inline-block w-6 font-bold">{String.fromCharCode(65 + idx)}.</span> {opt}
+                                    {showExp && idx === q.ans && <i className="fa-solid fa-check float-right mt-1 text-emerald-400"></i>}
+                                    {showExp && idx === selected && idx !== q.ans && <i className="fa-solid fa-xmark float-right mt-1 text-red-400"></i>}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {showExp && (
+                        <div className="bg-slate-900 p-5 rounded-lg border border-slate-700 mb-6 animate-fade-in border-l-4 border-l-blue-500">
+                            <h4 className="font-bold text-white mb-2 flex items-center">
+                                {selected === q.ans ? <span className="text-emerald-400"><i className="fa-solid fa-circle-check mr-2"></i> Correct!</span> : <span className="text-red-400"><i className="fa-solid fa-circle-xmark mr-2"></i> Incorrect</span>}
+                            </h4>
+                            <p className="text-slate-300 text-sm leading-relaxed">{q.exp}</p>
+                        </div>
+                    )}
+
+                    {showExp && (
+                        <button onClick={nextQ} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-4 rounded-lg transition-colors shadow-lg text-lg">
+                            {currentQ < questions.length - 1 ? 'ข้อถัดไป ➔' : 'ดูผลคะแนน ➔'}
+                        </button>
+                    )}
+                </div>
+            );
+        };
+
+        // --- Mock Exam Component (รูปแบบจริง: ถูก/ผิด + เติมคำ) ---
+        const RealQuiz = () => {
+            const questions = [
+                // Part 1: ถูก/ผิด (+2 / -1 / 0)
+                { type: 'tf', q: "fork() จะคืนค่า PID ของลูกให้ Parent และคืนค่า 0 ให้ Child", ans: true, exp: "Parent ได้ PID ของลูก (มากกว่า 0) ส่วน Child ได้ 0 เราใช้ค่านี้แยกการทำงานของแม่กับลูก" },
+                { type: 'tf', q: "หลัง fork() แล้ว Parent และ Child จะใช้ Memory ชุดเดียวกัน (แก้ไขตัวแปรแล้วเห็นผลร่วมกัน)", ans: false, exp: "Memory แยกกันโดยเด็ดขาด! ลูกแก้ count เป็น 15 แต่ฝั่งแม่ยังเป็น 10 เหมือนเดิม (จริง ๆ ใช้ Copy-on-Write)" },
+                { type: 'tf', q: "exec() ทำหน้าที่สร้าง Process ใหม่ขึ้นมาอีกตัว", ans: false, exp: "exec() ไม่สร้าง Process ใหม่ แต่แทนที่ Memory Image ของ Process ปัจจุบันด้วยโปรแกรมใหม่ PID ยังคงเดิม" },
+                { type: 'tf', q: "ถ้า exec() ทำงานสำเร็จ โค้ดทุกบรรทัดที่อยู่ถัดจาก exec() จะถูกรันต่อตามปกติ", ans: false, exp: "โปรแกรมถูกแทนที่ไปแล้ว จึงไม่มีทางกลับมารันโค้ดเดิม — โค้ดหลัง exec() จะไม่ถูกรัน (รันก็ต่อเมื่อ exec ล้มเหลว)" },
+                { type: 'tf', q: "ถ้า Parent ตายก่อน Child ระบบจะฝาก Child ให้ Process หมายเลข 0 ดูแล", ans: false, exp: "ฝากให้ init / systemd ซึ่งมี PID 1 (ไม่ใช่ 0) และ init จะเรียก wait() ให้ ลูกจึงไม่ค้างเป็น Zombie" },
+                { type: 'tf', q: "Zombie Process คือ Process ที่ยังรันไม่เสร็จแล้วโดนคำสั่ง kill", ans: false, exp: "Zombie คือลูกที่จบแล้ว (exit) แต่แม่ยังไม่เรียก wait() ทำให้ PCB ค้างอยู่ในระบบรอแม่มารับสถานะ" },
+                { type: 'tf', q: "Round Robin ที่ใช้ Time Quantum ใหญ่มาก จะมีพฤติกรรมคล้าย FCFS", ans: true, exp: "q ใหญ่จนงานส่วนใหญ่รันเสร็จภายในรอบเดียว ก็ไม่ต่างจากการรันจนเสร็จตามลำดับคิว (FCFS)" },
+                { type: 'tf', q: "SJF ให้ค่าเฉลี่ย Waiting Time ต่ำที่สุดเมื่อเทียบกับ FCFS", ans: true, exp: "งานสั้นได้ทำก่อน งานอื่นรอน้อยลง SJF (และ SRTF) ให้ Average Waiting Time ดีที่สุด" },
+                { type: 'tf', q: "ช่วงเวลาที่ CPU ใช้ทำ Context Switch ถือเป็นเวลาทำงานที่มีประโยชน์", ans: false, exp: "Context Switch เป็น Overhead ล้วน ๆ — ระหว่างนั้นระบบไม่ได้ประมวลผลงานใดเลย" },
+                { type: 'tf', q: "User-Level Thread ถ้ามี Thread เดียวบล็อก จะพา Thread อื่นใน Process เดียวกันบล็อกไปหมด", ans: true, exp: "เพราะ OS ไม่รู้จัก ULT — OS เห็นเป็น Process เดียว เมื่อ Process ถูกบล็อก ทั้ง Process (ทุก Thread) ก็บล็อกหมด ต่างจาก KLT" },
+                { type: 'tf', q: "Aging คือเทคนิคการค่อย ๆ เพิ่ม Priority ให้ Process ที่รอนาน เพื่อแก้ปัญหา Starvation", ans: true, exp: "ยิ่งรอนาน Priority ยิ่งเพิ่ม จนได้รันสักที เป็นทางแก้ Starvation ใน Priority Scheduling มาตรฐาน" },
+                { type: 'tf', q: "Bootstrap Program ถูกเก็บไว้ใน Hard Disk เพื่อให้แก้ไขอัปเดตได้ง่าย", ans: false, exp: "Bootstrap Program อยู่ใน Firmware (ROM/EEPROM) เพราะตอนเปิดเครื่องยังอ่านดิสก์ไม่ได้" },
+                { type: 'tf', q: "Microkernel ทำงานเร็วกว่า Monolithic Kernel เพราะโครงสร้างเล็กกว่า", ans: false, exp: "Microkernel ช้ากว่า เพราะบริการต่าง ๆ ย้ายไป User Space ต้องส่งข้อความ (Message Passing) ข้ามโหมดบ่อย ๆ ข้อดีของมันคือเสถียร/ปลอดภัย" },
+                { type: 'tf', q: "ใน Multilevel Queue (MLQ) Process สามารถย้ายชั้นคิวได้ตามพฤติกรรมของมัน", ans: false, exp: "MLQ ตายตัว ย้ายชั้นไม่ได้! ตัวที่ย้ายชั้นได้คือ Multilevel Feedback Queue (MLFQ)" },
+                // Part 2: เติมคำ (+2 / 0)
+                { type: 'fill', q: "เรียก fork() 3 ครั้งติดต่อกัน จะมี Process เกิดขึ้นทั้งหมดกี่ตัว? (ตอบเป็นตัวเลข)", ans: ["8"], exp: "จำนวน Process = 2^n = 2^3 = 8 ตัว (รวม Parent ตัวแรกด้วย — อย่าลืม!)" },
+                { type: 'fill', q: "Process ที่ Parent ยังไม่เรียก wait() หลังจากลูก exit ไปแล้ว เรียกว่าอะไร?", ans: ["zombie"], exp: "Zombie — PCB ค้างอยู่รอ Parent มารับสถานะผ่าน wait()" },
+                { type: 'fill', q: "init / systemd process มี PID เท่ากับเท่าไร?", ans: ["1"], exp: "PID 1 คือ init/systemd เป็นโปรเซสแรกที่ Kernel สร้าง และเป็นที่ฝากเลี้ยง Orphan Process" },
+                { type: 'fill', q: "PCB ย่อมาจากอะไร?", ans: ["process control block"], exp: "Process Control Block — โครงสร้างที่ OS เก็บข้อมูลของแต่ละ Process (Register, PC, State, PID...)" },
+                { type: 'fill', q: "อัลกอริทึม Scheduling ที่ใช้ Time Quantum คืออะไร?", ans: ["round robin", "rr"], exp: "Round Robin — ทุกงานได้รันวนรอบ คนละเท่า ๆ กัน ตาม q ที่กำหนด" },
+                { type: 'fill', q: "P1=24, P2=3, P3=3 มาถึงพร้อมกัน ใช้ FCFS จะได้ Average Waiting Time เท่าไร? (ตอบเป็นตัวเลข)", ans: ["17"], exp: "WT = 0, 24, 27 → เฉลี่ย (0+24+27)/3 = 17" },
+                { type: 'fill', q: "ฟังก์ชันที่ให้ Parent รอ Child ที่เจาะจง PID ได้ (ต่างจาก wait() ที่รอตัวไหนก็ได้) ชื่อว่าอะไร?", ans: ["waitpid"], exp: "waitpid(pid, &status, options) — ระบุ PID ได้ และใช้ WNOHANG เพื่อเช็คแบบไม่ block" },
+                { type: 'fill', q: "เทคนิคแก้ปัญหา Starvation ใน Priority Scheduling เรียกว่าอะไร?", ans: ["aging"], exp: "Aging — ค่อย ๆ เพิ่ม Priority ให้ Process ที่รอนาน จนในที่สุดได้รัน" },
+                { type: 'fill', q: "โปรแกรมแรกที่ Kernel เรียกใช้หลังบูตเสร็จ (PID 1) ชื่อว่าอะไร?", ans: ["init", "systemd"], exp: "init (ระบบเก่า) หรือ systemd (ระบบใหม่) คือโปรเซสแรกของ User Space" },
+                { type: 'fill', q: "Q: P1=6, P2=8, P3=7, P4=3 (SJF, มาพร้อมกัน) Average Waiting Time = ? (ตอบเป็นตัวเลข)", ans: ["7"], exp: "ลำดับ: P4(3) → P1(6) → P3(7) → P2(8) ได้ WT = 0, 3, 9, 16 → เฉลี่ย 7" }
+            ];
+
+            const [currentQ, setCurrentQ] = useState(0);
+            const [selected, setSelected] = useState(null);
+            const [showExp, setShowExp] = useState(false);
+            const [score, setScore] = useState(0);
+            const [finished, setFinished] = useState(false);
+            const [fillInput, setFillInput] = useState("");
+            const [wrongFill, setWrongFill] = useState(false);
+
+            const q = questions[currentQ];
+
+            const handleTf = (idx) => {
+                if (showExp) return;
+                setSelected(idx);
+                setShowExp(true);
+                if (idx === (q.ans ? 0 : 1)) setScore(score + 2);
+                else setScore(score - 1);
+            };
+
+            const handleSkip = () => {
+                setSelected(null); setShowExp(false); setWrongFill(false); setFillInput("");
+                if (currentQ < questions.length - 1) setCurrentQ(currentQ + 1);
+                else setFinished(true);
+            };
+
+            const handleFill = () => {
+                if (showExp) return;
+                const norm = fillInput.trim().toLowerCase().replace(/\s+/g, ' ');
+                const ok = q.ans.some(a => norm === a.toLowerCase());
+                setShowExp(true);
+                setWrongFill(!ok);
+                if (ok) setScore(score + 2);
+            };
+
+            const nextQ = () => {
+                setSelected(null); setShowExp(false); setWrongFill(false); setFillInput("");
+                if (currentQ < questions.length - 1) setCurrentQ(currentQ + 1);
+                else setFinished(true);
+            };
+
+            if (finished) {
+                const totalTf = questions.filter(x => x.type === 'tf').length * 2;
+                const totalFill = questions.filter(x => x.type === 'fill').length * 2;
+                return (
+                    <div className="bg-slate-800 p-10 rounded-xl text-center border border-slate-700 shadow-2xl animate-fade-in max-w-2xl mx-auto">
+                        <h2 className="text-4xl font-black text-white mb-6">สอบเสร็จแล้ว! 🎉</h2>
+                        <div className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400 mb-4">{score} / {totalTf + totalFill}</div>
+                        <p className="text-slate-400 text-sm mb-8">(ถูก/ผิด: ถูก +2 ผิด -1 เว้น 0 | เติมคำ: ถูก +2 ผิด 0)</p>
+                        <p className="text-slate-300 text-lg mb-8">
+                            {score >= (totalTf + totalFill) * 0.7 ? 'เยี่ยมมาก! คะแนนระดับนี้พร้อมลุยสนามจริงแล้ว!' : 'ยังมีจุดที่ต้องทบทวน กลับไปอ่านบทที่พลาดอีกรอบนะครับ'}
+                        </p>
+                        <button onClick={() => {setFinished(false); setCurrentQ(0); setScore(0); setSelected(null); setShowExp(false); setFillInput("");}} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-full transition shadow-lg">
+                            ลองทำใหม่อีกครั้ง
+                        </button>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="bg-slate-800 p-8 rounded-xl border border-slate-700 shadow-2xl max-w-3xl mx-auto animate-fade-in">
+                    <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-700">
+                        <span className="text-blue-400 font-bold bg-blue-900/30 px-3 py-1 rounded">ข้อ {currentQ + 1} / {questions.length} <span className="ml-2 text-xs text-slate-400">{q.type === 'tf' ? '[ถูก/ผิด]' : '[เติมคำ]'}</span></span>
+                        <span className="text-slate-400 font-bold">Score: <span className="text-emerald-400">{score}</span></span>
+                    </div>
+
+                    <h3 className="text-xl text-white font-semibold mb-6 whitespace-pre-wrap leading-relaxed">{q.q}</h3>
+
+                    {q.type === 'tf' ? (
+                        <div className="space-y-3 mb-8">
+                            <div className="grid grid-cols-2 gap-3">
+                                {["ถูก", "ผิด"].map((opt, idx) => {
+                                    let cls = "w-full text-left p-4 rounded-lg border-2 transition-all duration-200 font-bold text-center ";
+                                    if (!showExp) cls += "border-slate-700 hover:border-blue-500 bg-slate-900/50 hover:bg-slate-700 text-slate-300";
+                                    else if (idx === (q.ans ? 0 : 1)) cls += "border-emerald-500 bg-emerald-900/20 text-emerald-300";
+                                    else if (idx === selected) cls += "border-red-500 bg-red-900/20 text-red-300";
+                                    else cls += "border-slate-800 bg-slate-900/30 text-slate-600 opacity-50";
+                                    return (
+                                        <button key={idx} onClick={() => handleTf(idx)} disabled={showExp} className={cls}>
+                                            {idx === 0 ? <i className="fa-solid fa-circle-check mr-2"></i> : <i className="fa-solid fa-circle-xmark mr-2"></i>} {opt}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            {!showExp && (
+                                <button onClick={handleSkip} className="w-full p-3 rounded-lg border-2 border-dashed border-slate-600 text-slate-400 hover:bg-slate-900/50 transition text-sm font-medium">
+                                    ข้ามข้อนี้ (ได้ 0 คะแนน ไม่ติดลบ)
+                                </button>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="space-y-3 mb-8">
+                            <div className="flex gap-3">
+                                <input
+                                    type="text"
+                                    value={fillInput}
+                                    onChange={(e) => setFillInput(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') handleFill(); }}
+                                    disabled={showExp}
+                                    placeholder="พิมพ์คำตอบ..."
+                                    className="flex-1 bg-slate-900 border-2 border-slate-700 focus:border-blue-500 rounded-lg px-4 py-3 text-white outline-none disabled:opacity-50 font-mono"
+                                />
+                                <button onClick={handleFill} disabled={showExp || !fillInput.trim()} className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition disabled:opacity-50">
+                                    ตรวจคำตอบ
+                                </button>
+                            </div>
+                            {!showExp && (
+                                <button onClick={handleSkip} className="w-full p-3 rounded-lg border-2 border-dashed border-slate-600 text-slate-400 hover:bg-slate-900/50 transition text-sm font-medium">
+                                    ข้ามข้อนี้ (ได้ 0 คะแนน)
+                                </button>
+                            )}
+                        </div>
+                    )}
+
+                    {showExp && (
+                        <div className={`bg-slate-900 p-5 rounded-lg border border-slate-700 mb-6 animate-fade-in border-l-4 ${(q.type === 'tf' ? selected === (q.ans ? 0 : 1) : !wrongFill) ? 'border-l-emerald-500' : 'border-l-red-500'}`}>
+                            <h4 className="font-bold text-white mb-2 flex items-center">
+                                {(q.type === 'tf' ? selected === (q.ans ? 0 : 1) : !wrongFill) ? <span className="text-emerald-400"><i className="fa-solid fa-circle-check mr-2"></i> ตอบถูก (+2)</span> : <span className="text-red-400"><i className="fa-solid fa-circle-xmark mr-2"></i> {q.type === 'tf' ? 'ตอบผิด (-1)' : 'ตอบผิด (0)'}</span>}
+                            </h4>
+                            <p className="text-slate-300 text-sm leading-relaxed">{q.exp}</p>
+                            {q.type === 'tf' && <p className="text-slate-400 text-xs mt-2">คำตอบที่ถูกต้องคือ: <strong className="text-emerald-400">{q.ans ? 'ถูก' : 'ผิด'}</strong></p>}
+                            {q.type === 'fill' && <p className="text-slate-400 text-xs mt-2">คำตอบที่ยอมรับ: <strong className="text-emerald-400">{q.ans.join(' / ')}</strong></p>}
+                        </div>
+                    )}
+
+                    {showExp && (
+                        <button onClick={nextQ} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-4 rounded-lg transition-colors shadow-lg text-lg">
+                            {currentQ < questions.length - 1 ? 'ข้อถัดไป ➔' : 'ดูผลคะแนน ➔'}
+                        </button>
+                    )}
+                </div>
+            );
+        };
+
+        // --- Main App Layout ---
+        const App = () => {
+            const [activeTab, setActiveTab] = useState('intro');
+
+            const menuItems = [
+                { id: 'intro', icon: 'fa-desktop', label: 'Intro to OS' },
+                { id: 'boot', icon: 'fa-power-off', label: 'ขั้นตอนการบูตเครื่อง' },
+                { id: 'virt', icon: 'fa-box', label: 'VM & Container' },
+                { id: 'structure', icon: 'fa-sitemap', label: 'OS Structure' },
+                { id: 'ostypes', icon: 'fa-layer-group', label: 'ประเภทของ OS' },
+                { id: 'process1', icon: 'fa-memory', label: 'Process Concept 1' },
+                { id: 'process2', icon: 'fa-shuffle', label: 'Process Concept 2' },
+                { id: 'processmgmt', icon: 'fa-code-branch', label: 'fork / exec / wait' },
+                { id: 'thread', icon: 'fa-network-wired', label: 'Intro to Thread' },
+                { id: 'scheduling', icon: 'fa-microchip', label: 'CPU Scheduling' },
+                { id: 'anim', icon: 'fa-clapperboard', label: 'Process Animation', isHighlight: true },
+                { id: 'strategy', icon: 'fa-crosshairs', label: 'กลยุทธ์ทำข้อสอบ', isHighlight: true },
+                { id: 'realquiz', icon: 'fa-clipboard-check', label: 'ข้อสอบจำลอง (รูปแบบจริง)', isHighlight: true },
+                { id: 'quiz', icon: 'fa-clipboard-question', label: 'Quiz ทบทวน (MCQ)' }
+            ];
+
+            return (
+                <div className="min-h-screen flex flex-col md:flex-row bg-[#0f172a]">
+                    {/* Sidebar */}
+                    <aside className="w-full md:w-72 bg-slate-900 border-r border-slate-800 flex flex-col shadow-2xl z-20">
+                        <div className="p-6 border-b border-slate-800">
+                            <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400 drop-shadow-md tracking-tight">
+                                OS Masterclass
+                            </h1>
+                            <p className="text-slate-400 text-xs mt-2 uppercase tracking-[0.2em] font-bold">Midterm Edition</p>
+                        </div>
+                        
+                        <nav className="flex-1 overflow-y-auto p-4 space-y-1">
+                            {menuItems.map(item => (
+                                <button 
+                                    key={item.id}
+                                    onClick={() => setActiveTab(item.id)} 
+                                    className={`w-full flex items-center px-4 py-3 rounded-lg transition-all duration-200 text-sm font-medium ${
+                                        activeTab === item.id 
+                                        ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30 shadow-inner' 
+                                        : item.isHighlight 
+                                            ? 'text-yellow-200/80 hover:bg-slate-800 hover:text-yellow-200 mt-4 border border-slate-800' 
+                                            : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                                    }`}
+                                >
+                                    <i className={`fa-solid ${item.icon} w-6 text-center mr-2 ${activeTab === item.id ? 'text-blue-400' : ''}`}></i>
+                                    {item.label}
+                                </button>
+                            ))}
+                        </nav>
+                    </aside>
+
+                    {/* Main Content Area */}
+                    <main className="flex-1 p-6 md:p-10 lg:p-12 overflow-y-auto bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-slate-800 via-[#0f172a] to-slate-900">
+                        {/* Render standard content blocks */}
+                        {contentData[activeTab] && (
+                            <div className="max-w-4xl mx-auto animate-fade-in">
+                                {contentData[activeTab]}
+                                
+                                {/* Show Sample Code in Process Concept sections for extra completeness */}
+                                {activeTab === 'process1' && (
+                                    <CodeBlock 
+                                        language="c" 
+                                        code={`#include <stdio.h>\n#include <unistd.h>\n\nint global_var = 0; // Data Section\n\nint main() {\n    int local_var = 1; // Stack\n    int *heap_ptr = malloc(sizeof(int)); // Heap\n    return 0;\n}`} 
+                                    />
+                                )}
+                            </div>
+                        )}
+
+                        {/* Render special components */}
+                        {activeTab === 'anim' && <div className="max-w-5xl mx-auto"><ProcessAnimation /></div>}
+                        {activeTab === 'realquiz' && <div className="max-w-4xl mx-auto"><RealQuiz /></div>}
+                        {activeTab === 'quiz' && <div className="max-w-4xl mx-auto"><Quiz /></div>}
+                    </main>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(
+            <React.Fragment>
+                <App />
+                <TermPopover />
+            </React.Fragment>
+        );
+    </script>
+</body>
+</html>
