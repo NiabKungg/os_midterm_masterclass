@@ -907,6 +907,37 @@
                             <DBox x={60} y={170} w={190} h={60} title="Parent รันต่อ" sub={["wait() คืน PID = 101"]} stroke="#2563eb" />
                             <DArrow x1={155} y1={132} x2={155} y2={165} color="#2563eb" />
                         </Diagram>
+                        <p className="text-sm text-slate-700 mb-1"><strong className="text-blue-600">โค้ดสมบูรณ์ของภาพนี้ — คัดลอกไปรันได้เลย:</strong></p>
+                        <CodeBlock language="c" code={`#include <stdio.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <stdlib.h>
+
+int main() {
+    pid_t pid = fork();
+
+    if (pid < 0) {                        // fork ล้มเหลว (หาได้ยาก)
+        perror("fork failed");
+        exit(1);
+    }
+    if (pid == 0) {                       // ---- ฝั่งลูก (PID 101) ----
+        execlp("/bin/ls", "ls", NULL);    // แปลงร่างเป็น ls
+        perror("exec failed");            // ถึงบรรทัดนี้ = exec พังเท่านั้น
+        exit(1);
+    }
+
+    // ---- ฝั่งแม่ (PID 100) ----
+    int status;
+    waitpid(pid, &status, 0);             // รอลูกจบ (ภาพนี้ใช้ wait(NULL) ก็ได้ผลเดียวกัน)
+    if (WIFEXITED(status)) {
+        printf("ลูกจบด้วย exit code = %d\\n", WEXITSTATUS(status));
+    }
+    return 0;
+}`} />
+                        <ul className="list-disc ml-6 space-y-1 text-sm text-slate-700">
+                            <li>บรรทัด <code className="text-amber-600">waitpid(pid, &amp;status, 0)</code> เทียบเท่ากับ <code className="text-amber-600">wait(NULL)</code> ในภาพ — ตัวแรกอ่าน exit status ได้ด้วย</li>
+                            <li>ผลลัพธ์จริง: แม่รอจน ls ทำงานเสร็จ แล้วพิมพ์ "ลูกจบด้วย exit code = 0"</li>
+                        </ul>
                     </div>
 
                     <div className="bg-slate-50 p-5 rounded-xl border border-slate-300">
@@ -1038,6 +1069,107 @@ execvp("ls",      args);                       // vp: array + PATH
 execve("/bin/ls", args, envp);                 // ve: array + env (system call จริง)
 
 // ทุกตัว: argument ตัวแรกคือ "ชื่อโปรแกรม" (argv[0]) ตัวสุดท้ายต้องเป็น NULL / ต้องจบด้วย NULL เสมอ`} />
+
+                        <h4 className="font-bold text-slate-900 text-base mt-5 mb-2">คำสั่งยอดฮิตที่ข้อสอบชอบให้ exec() เรียก — ต้องรู้ว่ามันพิมพ์อะไรออกมา!</h4>
+                        <p className="text-sm text-slate-700 mb-3">โจทย์ไล่โค้ดส่วนใหญ่จะให้ลูกรันคำสั่ง Unix พื้นฐานผ่าน exec — ถ้ารู้ว่าแต่ละคำสั่งทำอะไร ก็จะตอบได้ทันทีว่า "ผลลัพธ์บนจอคืออะไร"</p>
+                        <div className="overflow-x-auto mb-3">
+                            <table className="w-full text-sm border border-slate-300 rounded-lg overflow-hidden">
+                                <thead className="bg-slate-100 text-slate-800">
+                                    <tr>
+                                        <th className="p-2 text-left">คำสั่ง</th>
+                                        <th className="p-2 text-left">ทำอะไร</th>
+                                        <th className="p-2 text-left">ตัวอย่างในข้อสอบ</th>
+                                        <th className="p-2 text-left">ผลลัพธ์</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="text-slate-700">
+                                    <tr className="border-t border-slate-300">
+                                        <td className="p-2 font-mono font-bold">ls</td>
+                                        <td className="p-2">แสดงรายชื่อไฟล์/โฟลเดอร์ในโฟลเดอร์ปัจจุบัน</td>
+                                        <td className="p-2 font-mono text-xs">execlp("ls", "ls", NULL)</td>
+                                        <td className="p-2">พิมพ์ชื่อไฟล์ทีละบรรทัด</td>
+                                    </tr>
+                                    <tr className="border-t border-slate-300">
+                                        <td className="p-2 font-mono font-bold">echo</td>
+                                        <td className="p-2">พิมพ์ข้อความที่ส่งมาเป็น argument กลับออกจอ</td>
+                                        <td className="p-2 font-mono text-xs">execlp("/bin/echo", "echo", "Hello", NULL)</td>
+                                        <td className="p-2 font-mono text-xs">Hello</td>
+                                    </tr>
+                                    <tr className="border-t border-slate-300">
+                                        <td className="p-2 font-mono font-bold">sh -c</td>
+                                        <td className="p-2">สั่งให้ shell รันคำสั่งที่อยู่ใน string (ใช้ได้แทบทุกคำสั่ง)</td>
+                                        <td className="p-2 font-mono text-xs">execlp("sh", "sh", "-c", "echo hi", NULL)</td>
+                                        <td className="p-2 font-mono text-xs">hi</td>
+                                    </tr>
+                                    <tr className="border-t border-slate-300">
+                                        <td className="p-2 font-mono font-bold">cat</td>
+                                        <td className="p-2">พิมพ์เนื้อหาทั้งหมดของไฟล์ที่ระบุออกจอ</td>
+                                        <td className="p-2 font-mono text-xs">execlp("cat", "cat", "file.txt", NULL)</td>
+                                        <td className="p-2">เนื้อหาใน file.txt</td>
+                                    </tr>
+                                    <tr className="border-t border-slate-300">
+                                        <td className="p-2 font-mono font-bold">ps</td>
+                                        <td className="p-2">แสดงรายการ Process ที่กำลังรันอยู่</td>
+                                        <td className="p-2 font-mono text-xs">execlp("ps", "ps", NULL)</td>
+                                        <td className="p-2">ตาราง PID/คำสั่งที่รันอยู่</td>
+                                    </tr>
+                                    <tr className="border-t border-slate-300">
+                                        <td className="p-2 font-mono font-bold">sleep</td>
+                                        <td className="p-2">หยุดรอ N วินาที (โจทย์ชอบใช้ถามเรื่อง timing)</td>
+                                        <td className="p-2 font-mono text-xs">execlp("sleep", "sleep", "5", NULL)</td>
+                                        <td className="p-2">เงียบ 5 วินาทีแล้วจบ</td>
+                                    </tr>
+                                    <tr className="border-t border-slate-300">
+                                        <td className="p-2 font-mono font-bold">date</td>
+                                        <td className="p-2">แสดงวัน-เวลาปัจจุบันของเครื่อง</td>
+                                        <td className="p-2 font-mono text-xs">execlp("date", "date", NULL)</td>
+                                        <td className="p-2">เช่น Fri Aug 21 10:30:00 +07 2026</td>
+                                    </tr>
+                                    <tr className="border-t border-slate-300">
+                                        <td className="p-2 font-mono font-bold">pwd</td>
+                                        <td className="p-2">แสดง path ของโฟลเดอร์ที่ทำงานอยู่ปัจจุบัน</td>
+                                        <td className="p-2 font-mono text-xs">execlp("pwd", "pwd", NULL)</td>
+                                        <td className="p-2 font-mono text-xs">/home/user</td>
+                                    </tr>
+                                    <tr className="border-t border-slate-300">
+                                        <td className="p-2 font-mono font-bold">wc</td>
+                                        <td className="p-2">นับบรรทัด/คำ/ตัวอักษรของไฟล์ (เรียงตามลำดับนี้)</td>
+                                        <td className="p-2 font-mono text-xs">execlp("wc", "wc", "f.txt", NULL)</td>
+                                        <td className="p-2 font-mono text-xs">5 20 100 f.txt</td>
+                                    </tr>
+                                    <tr className="border-t border-slate-300">
+                                        <td className="p-2 font-mono font-bold">rm</td>
+                                        <td className="p-2">ลบไฟล์ (โจทย์ชอบถามว่าไฟล์หายไปไหม)</td>
+                                        <td className="p-2 font-mono text-xs">execlp("rm", "rm", "a.txt", NULL)</td>
+                                        <td className="p-2">ไม่มีอะไรพิมพ์ แต่ไฟล์หายแล้ว</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div className="bg-white p-4 rounded border border-slate-300 mb-3 text-sm text-slate-700">
+                            <strong className="text-purple-600 block mb-1">กลไกการทำงาน (ให้เห็นภาพ):</strong>
+                            <ul className="list-disc ml-6 space-y-1">
+                                <li>exec แทนที่ Process เดิมด้วยโปรแกรมของคำสั่งนั้น — ตัว command-line arguments ที่เราส่งเข้า exec จะกลายเป็น <strong>argv</strong> ของโปรแกรมใหม่ เหมือนเราไปพิมพ์เองใน Terminal</li>
+                                <li><strong>argv[0]</strong> คือชื่อคำสั่ง (เช่น "ls") ดังนั้น argument ตัวแรกของ exec จะซ้ำกับชื่อโปรแกรมเสมอ แล้วตามด้วย option/ค่าจริง ๆ</li>
+                                <li>ด้วยเหตุนี้ทุกการเรียกจึงอยู่ในรูปแบบ: <code className="text-amber-600">execlp("ls", "ls", "-l", NULL)</code> = argv[0]="ls", argv[1]="-l", argv[2]=NULL</li>
+                            </ul>
+                        </div>
+                        <CodeBlock language="c" code={`// ตัวอย่างรวม: ลูกรัน 3 คำสั่งนี้ (สมมติให้ลองแก้ path ตามโจทย์ดู)
+if (pid == 0) {
+    execlp("ls", "ls", NULL);                     // 1. พิมพ์ชื่อไฟล์ในโฟลเดอร์
+    // execlp("/bin/echo", "echo", "Hi", NULL);   // 2. พิมพ์ Hi
+    // execlp("sh", "sh", "-c", "ps", NULL);      // 3. แสดง process ที่รันอยู่
+    perror("exec ล้มเหลว");
+    exit(1);
+}`} />
+                        <div className="bg-red-100 border border-red-300 rounded p-3 text-sm text-slate-700">
+                            <strong className="text-red-600">จุดระวังตอนทำโจทย์:</strong>
+                            <ul className="list-disc ml-6 space-y-1 mt-1">
+                                <li>arg ตัวสุดท้ายต้องจบด้วย <code className="text-amber-600">NULL</code> เสมอ — ลืมแล้วโปรแกรมพัง (Undefined Behavior)</li>
+                                <li>ถ้าใช้ตัวตระกูล <code className="text-amber-600">p</code> (execlp/execvp) ไม่ต้องเขียน path เต็ม — แต่ถ้าโจทย์ใช้ execl ต้องระบุ <code className="text-amber-600">/bin/...</code> ให้ครบ</li>
+                                <li>คำสั่งรันแล้วจะแทนที่ลูกทั้งตัว — ถ้าคำสั่ง "พิมพ์อะไรออกมา" อย่าลืมว่าโค้ดฝั่งแม่ก็ยังรันต่อ อาจพิมพ์เพิ่มอีก</li>
+                            </ul>
+                        </div>
                         <p className="mt-3 text-sm text-slate-700 bg-purple-100 border border-purple-300 rounded p-3"><i className="fa-solid fa-lightbulb text-purple-600"></i> <strong>สูตรมาตรฐาน fork + exec:</strong> ลูกรัน exec เพื่อกลายเป็นโปรแกรมใหม่ ส่วนแม่ wait เก็บงาน — ดูตัวอย่างเต็ม ๆ ในขั้น 4</p>
                     </div>
 
