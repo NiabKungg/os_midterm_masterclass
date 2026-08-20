@@ -77,10 +77,10 @@
                 tok(/("[^"]*")/g, 'text-amber-600');
                 tok(/(\/\/.*)/g, 'text-emerald-500/70 italic');
                 tok(/\b(\d+)\b/g, 'text-purple-600');
-                tokens.forEach((t, i) => {
+                for (let i = tokens.length - 1; i >= 0; i--) {
                     const ph = '\u0000' + String.fromCharCode(65 + (i % 26)) + String.fromCharCode(65 + Math.floor(i / 26)) + '\u0000';
-                    html = html.replace(ph, t);
-                });
+                    html = html.replace(ph, tokens[i]);
+                }
                 return { __html: html };
             };
 
@@ -171,7 +171,7 @@
         };
 
         // --- Glossary: ศัพท์เฉพาะอธิบายแบบง่ายสุด ---
-        const Glossary = ({ title = "ศัพท์ต้องรู้ในหน้านี้ (ฉบับคนไม่เคยเรียน)", words }) => (
+        const Glossary = ({ title = "ศัพท์ต้องรู้ในหน้านี้", words }) => (
             <div className="bg-slate-100 p-5 rounded-xl border border-cyan-300 mt-6">
                 <h3 className="text-xl font-bold text-cyan-700 mb-4"><i className="fa-solid fa-book-open-reader mr-2"></i>{title}</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
@@ -937,9 +937,9 @@
 int main() {
     pid_t pid = fork();   // นับจากบรรทัดนี้ มี 2 process แล้ว!
 
-    if (pid < 0)  { printf("fork ล้มเหลว\n"); }
-    if (pid == 0) { printf("ผมคือลูก  PID = %d แม่ผมคือ %d\n", getpid(), getppid()); }
-    if (pid > 0)  { printf("ผมคือแม่  PID = %d ลูกผมคือ %d\n", getpid(), pid); }
+    if (pid < 0)  { printf("fork ล้มเหลว\\n"); }
+    if (pid == 0) { printf("ผมคือลูก  PID = %d แม่ผมคือ %d\\n", getpid(), getppid()); }
+    if (pid > 0)  { printf("ผมคือแม่  PID = %d ลูกผมคือ %d\\n", getpid(), pid); }
     return 0;
 }`} />
                         <ul className="list-disc ml-6 space-y-2 text-sm text-slate-700">
@@ -1097,9 +1097,9 @@ int main() {
     waitpid(pid, &status, 0);     // 0 = รอแบบปกติ (block)
 
     if (WIFEXITED(status)) {
-        printf("ลูกจบเองด้วย exit code = %d\n", WEXITSTATUS(status));
+        printf("ลูกจบเองด้วย exit code = %d\\n", WEXITSTATUS(status));
     } else if (WIFSIGNALED(status)) {
-        printf("ลูกโดน signal ฆ่า!\n");
+        printf("ลูกโดน signal ฆ่า!\\n");
     }
     return 0;
 }`} />
@@ -1131,10 +1131,10 @@ int main() {
 #include <unistd.h>
 
 int main() {
-    printf("Start\n");
+    printf("Start\\n");
     fork();
     fork();
-    printf("Hello\n");
+    printf("Hello\\n");
     return 0;
 }`} />
                             <p><strong>คำถาม:</strong> "Start" พิมพ์กี่ครั้ง และ "Hello" พิมพ์กี่ครั้ง?</p>
@@ -1150,11 +1150,11 @@ int main() {
 
     if (pid == 0) {
         x += 10;
-        printf("Child : x = %d\n", x);
+        printf("Child : x = %d\\n", x);
         exit(0);
     } else {
         wait(NULL);
-        printf("Parent: x = %d\n", x);
+        printf("Parent: x = %d\\n", x);
     }
     return 0;
 }`} />
@@ -1168,7 +1168,7 @@ int main() {
     for (int i = 0; i < 2; i++) {
         fork();
     }
-    printf("P\n");
+    printf("P\\n");
     return 0;
 }`} />
                             <p><strong>คำถาม:</strong> "P" พิมพ์กี่ครั้ง?</p>
@@ -1182,10 +1182,10 @@ int main() {
 
     if (pid == 0) {
         execlp("/bin/echo", "echo", "Hello from child", NULL);
-        printf("บรรทัดนี้จะรันหรือไม่?\n");
+        printf("บรรทัดนี้จะรันหรือไม่?\\n");
     }
     wait(NULL);
-    printf("Done\n");
+    printf("Done\\n");
     return 0;
 }`} />
                             <p><strong>คำถาม:</strong> ผลลัพธ์ที่เห็นบนจอคืออะไร? (สมมติ echo อยู่ใน PATH แน่นอน)</p>
@@ -1574,48 +1574,65 @@ int main() {
 
             const steps = [
                 {
-                    title: "เริ่มต้น (Before Fork)",
-                    desc: "ระบบมีเพียงโปรแกรมหลักทำงานอยู่ เรียกว่า Parent Process (PID=100) ตัวแปร x เก็บค่า 10",
+                    title: "1. เริ่มต้น (Before Fork)",
+                    desc: "มีแค่โปรแกรมหลัก (Parent, PID 100) รันอยู่ตัวเดียว ตัวแปร x = 10",
                     parentState: "Running", childState: null,
+                    arrow: null,
                     pCodeHighlight: 0,
                     pText: "Parent (PID=100)\nCode: main()\nVars: x = 10",
                     cText: null
                 },
                 {
-                    title: "สร้างลูก (Fork)",
-                    desc: "Parent เรียก fork() ระบบก๊อปปี้ทุกอย่างสร้าง Child Process (PID=101) แต่แยก Memory กันอย่างเด็ดขาด! fork() คืนค่า 101 ให้แม่ และคืน 0 ให้ลูก",
+                    title: "2. สร้างลูก (Fork)",
+                    desc: "Parent เรียก fork() → ระบบก๊อปปี้ทุกอย่างสร้าง Child (PID 101) Memory แยกกันเด็ดขาด! แม่ได้คืน 101 ลูกได้คืน 0",
                     parentState: "Running", childState: "Ready",
+                    arrow: "fork() สร้างลูก\nคืน 101 ให้แม่ / คืน 0 ให้ลูก",
                     pCodeHighlight: 1,
                     pText: "Parent (PID=100)\nCode: main()\nVars: x = 10\npid = 101",
                     cText: "Child (PID=101)\nCode: main()\nVars: x = 10\npid = 0"
                 },
                 {
-                    title: "ลูกแปลงร่าง (Exec)",
-                    desc: "Child ตรวจพบว่าตัวเองมี pid=0 จึงเข้าไปทำงานใน block exec() มันจะถูก 'ผีสิง' เปลี่ยนโปรแกรมเดิมเป็นคำสั่ง '/bin/ls' ทันที",
+                    title: "3. ลูกแปลงร่าง (Exec)",
+                    desc: "ลูกเห็น pid == 0 จึงเรียก exec() — โปรแกรมเดิมถูกล้าง กลายเป็น /bin/ls (PID เดิม) แม่เริ่ม wait() รอ",
                     parentState: "Waiting", childState: "Running (Exec)",
-                    pCodeHighlight: 8, // Parent going to wait
-                    pText: "Parent (PID=100)\nStatus: Blocked\nWaiting for child...",
-                    cText: "Child (PID=101)\n[TRANSFORMED!]\nCode: /bin/ls\nExecuting command..."
-                },
-                {
-                    title: "ลูกจบการทำงาน (Exit & Zombie)",
-                    desc: "Child ทำคำสั่ง ls เสร็จสิ้น และเรียก exit() เพื่อคืนทรัพยากร แต่! PCB ยังค้างอยู่ในระบบ กลายเป็น Zombie Process ชั่วคราว",
-                    parentState: "Waiting", childState: "Zombie",
+                    arrow: "exec() แปลงร่าง\n→ /bin/ls",
                     pCodeHighlight: 8,
-                    pText: "Parent (PID=100)\nStatus: Blocked\nwait(&status)",
-                    cText: "☠️ Zombie (PID=101)\nDead but PCB exists.\nStatus code: 0"
+                    pText: "Parent (PID=100)\nStatus: Blocked\nwait(&status)...",
+                    cText: "Child (PID=101)\n[TRANSFORMED!]\nCode: /bin/ls\nExecuting..."
                 },
                 {
-                    title: "แม่รับสถานะลูก (Wait returns)",
-                    desc: "คำสั่ง wait() ของ Parent ตรวจพบการตายของลูก จึงดึงสถานะมาเก็บไว้ ระบบกำจัด Zombie ทิ้งไป Parent กลับมารันต่อ",
-                    parentState: "Running", childState: null, // Cleared
+                    title: "4. ลูกจบ → Zombie",
+                    desc: "ls เสร็จ ลูกเรียก exit() — ร่างตาย แต่ PCB ยังค้างอยู่จนกว่าแม่จะ wait() มารับสถานะ",
+                    parentState: "Waiting", childState: "Zombie",
+                    arrow: "exit() ลูกตาย\nแต่ PCB ยังค้าง (Zombie)",
+                    pCodeHighlight: 8,
+                    pText: "Parent (PID=100)\nStatus: Blocked\nwait(&status)...",
+                    cText: "☠️ Zombie (PID=101)\nตายแล้ว แต่ PCB ค้าง\nStatus code: 0"
+                },
+                {
+                    title: "5. แม่เก็บศพ (Wait returns)",
+                    desc: "wait() รับสถานะของลูก → ระบบกำจัด Zombie ทิ้ง แม่กลับมารันต่อได้",
+                    parentState: "Running", childState: null,
+                    arrow: "wait() เก็บสถานะ\n→ กำจัด Zombie",
                     pCodeHighlight: 9,
-                    pText: "Parent (PID=100)\nwait() returns 101\nPrinting complete.",
+                    pText: "Parent (PID=100)\nwait() returns 101\nทำงานต่อได้แล้ว ✓",
                     cText: null
                 }
             ];
 
             const current = steps[step];
+
+            const stateBadge = (state) => {
+                if (!state) return null;
+                const map = {
+                    'Running': 'bg-green-100 text-green-700 border-green-400',
+                    'Ready': 'bg-blue-100 text-blue-700 border-blue-400',
+                    'Waiting': 'bg-amber-100 text-amber-700 border-amber-400',
+                    'Zombie': 'bg-red-100 text-red-700 border-red-400',
+                    'Running (Exec)': 'bg-purple-100 text-purple-700 border-purple-400'
+                };
+                return <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full border ${map[state] || 'bg-slate-100 text-slate-600 border-slate-300'}`}>{state}</span>;
+            };
 
             const codeSnippet = `int x = 10;
 pid_t pid = fork();
@@ -1655,7 +1672,13 @@ else if (pid > 0) {
                                         return (
                                             <div key={i} className={`px-2 rounded ${isHighlight ? 'bg-blue-100 border-l-2 border-blue-600 text-slate-900' : ''}`}>
                                                 {line}
-                                            </div>
+                                {step === 4 && (
+                                    <div className="z-10 w-48 rounded-lg p-4 border-2 border-dashed border-slate-300 bg-slate-100/60 text-center">
+                                        <div className="text-slate-600 font-bold text-sm mb-1"><i className="fa-solid fa-trash-can"></i> Zombie ถูกกำจัดแล้ว</div>
+                                        <div className="text-xs text-slate-600 font-mono">PCB ถูกเก็บคืนระบบ<br/>ไม่มี PID 101 อีกต่อไป</div>
+                                    </div>
+                                )}
+                            </div>
                                         );
                                     })}
                                 </div>
@@ -1664,23 +1687,32 @@ else if (pid > 0) {
 
                         {/* Animation Panel */}
                         <div className="lg:w-2/3 bg-white rounded-xl border border-slate-300 p-6 shadow-xl flex flex-col relative overflow-hidden">
-                            <div className="text-center mb-6">
+                            <div className="text-center mb-5">
+                                <div className="no-print flex flex-wrap justify-center gap-2 mb-4">
+                                    {steps.map((st, i) => (
+                                        <button key={i} onClick={() => setStep(i)}
+                                            className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${i === step ? 'bg-blue-600 text-slate-900 border-blue-600 shadow' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}>
+                                            {st.title}
+                                        </button>
+                                    ))}
+                                </div>
                                 <h3 className="text-xl font-bold text-slate-900 mb-2">{current.title}</h3>
-                                <p className="text-slate-600 text-sm h-10">{current.desc}</p>
+                                <p className="text-slate-600 text-sm min-h-[40px] max-w-xl mx-auto">{current.desc}</p>
                             </div>
 
-                            <div className="flex-1 flex justify-center items-center gap-8 relative min-h-[250px]">
+                            <div className="flex-1 flex justify-center items-center gap-8 relative min-h-[260px]">
                                 {/* Parent Box */}
                                 <div className="process-box z-10 w-48 bg-slate-50 border-2 border-blue-500 rounded-lg p-4 shadow-lg shadow-blue-500/20">
                                     <div className="text-center font-black text-blue-600 border-b border-slate-300 pb-2 mb-2"><i className="fa-solid fa-user-tie"></i> Parent Process</div>
+                                    <div className="text-center mb-2">{stateBadge(current.parentState)}</div>
                                     <div className="font-mono text-xs whitespace-pre-wrap text-slate-700">{current.pText}</div>
                                 </div>
 
-                                {/* Fork Arrow */}
-                                {step >= 1 && step < 4 && (
-                                    <div className="z-0 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-slate-600 flex flex-col items-center">
-                                        <div className="text-xs mb-1">fork()</div>
-                                        <i className="fa-solid fa-arrow-right-long text-2xl text-blue-500/50"></i>
+                                {/* Action Arrow */}
+                                {current.arrow && (
+                                    <div className="z-20 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-1 pointer-events-none">
+                                        <div className="text-[11px] font-bold text-blue-600 bg-white px-3 py-1 rounded-lg border border-blue-300 shadow-md whitespace-pre-wrap text-center max-w-[220px]">{current.arrow}</div>
+                                        <i className="fa-solid fa-arrow-right-long text-3xl text-blue-500"></i>
                                     </div>
                                 )}
 
@@ -1693,6 +1725,7 @@ else if (pid > 0) {
                                         <div className={`text-center font-black pb-2 mb-2 border-b ${step===2 ? 'border-white/30':'border-slate-300 text-green-600'}`}>
                                             {step === 3 ? <i className="fa-solid fa-skull"></i> : <i className="fa-solid fa-child"></i>} Child Process
                                         </div>
+                                        <div className="text-center mb-2">{stateBadge(current.childState)}</div>
                                         <div className="font-mono text-xs whitespace-pre-wrap">{current.cText}</div>
                                     </div>
                                 )}
