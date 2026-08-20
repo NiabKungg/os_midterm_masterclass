@@ -883,7 +883,7 @@
             processmgmt: (
                 <div className="space-y-6">
                     <h2 className="text-3xl font-black text-blue-600 border-b border-slate-300 pb-2">4. การจัดการ Process: fork(), exec(), exit(), wait()</h2>
-                    <p className="text-slate-700">บทนี้คือ <strong className="text-amber-600">จุดชี้เป็นชี้ตายของข้อสอบ</strong> — อาจารย์เน้นให้ไล่โค้ดดูการทำงานทีละบรรทัด มีจุดหลอกเยอะ!</p>
+                    <p className="text-slate-700">บทนี้คือ <strong className="text-amber-600">จุดชี้เป็นชี้ตายของข้อสอบ</strong> — อาจารย์เน้นให้ไล่โค้ดดูการทำงานทีละบรรทัด มีจุดหลอกเยอะ! หน้านี้จะพาคุณจากศูนย์ (รู้แค่ C พื้นฐานพอ) ไล่ขึ้นไปจนอ่านโค้ด fork/exec แบบแยกตัวประกอบได้ เรื่องเดียวที่ต้องมีติดตัวคือ <strong>ไล่ทีละบรรทัด ห้ามเดา</strong></p>
 
                     <div className="bg-slate-50 p-5 rounded-xl border border-blue-300">
                         <h3 className="text-xl font-bold text-slate-900 mb-3"><i className="fa-solid fa-eye mr-2 text-blue-600"></i> ภาพรวมทั้งชีวิตของ Process ในรูปเดียว</h3>
@@ -910,51 +910,203 @@
                     </div>
 
                     <div className="bg-slate-50 p-5 rounded-xl border border-slate-300">
-                        <h3 className="text-xl font-bold text-slate-900 mb-3"><Term word="fork()"><i className="fa-solid fa-code-branch mr-2 text-blue-600"></i> fork()</Term> — สร้างลูก</h3>
+                        <h3 className="text-xl font-bold text-slate-900 mb-3"><i className="fa-solid fa-seedling mr-2 text-green-600"></i> ขั้น 0: ปูพื้น — Program กับ Process ต่างกันอย่างไร</h3>
                         <ul className="list-disc ml-6 space-y-2 text-sm text-slate-700">
-                            <li>สร้าง Process ใหม่ (Child) ที่เป็น <strong>Copy ของ Parent</strong> ทั้ง Code, Data, Heap, Stack</li>
-                            <li><strong className="text-emerald-600">ค่าที่คืนกลับ (ต้องจำ!):</strong> Parent ได้ PID ของลูก (&gt; 0), Child ได้ 0, Error ได้ -1</li>
-                            <li>หลัง fork() ทั้งแม่และลูกจะรันโค้ดบรรทัดถัดไป <u>พร้อมกัน</u> — ลำดับการรันขึ้นกับ Scheduler (ไม่แน่นอน!)</li>
-                            <li>Memory แยกกันเด็ดขาด: ลูกแก้ตัวแปร ไม่กระทบแม่ (จริง ๆ ใช้เทคนิค <Term word="Copy-on-Write">Copy-on-Write</Term> เพื่อประหยัด)</li>
-                            <li>จำนวน process หลัง fork() n ครั้ง = 2<sup>n</sup> ตัว (กับดักยอดฮิต! ไม่ใช่ n+1)</li>
+                            <li><Term word="Program"><strong>Program</strong></Term> คือไฟล์ที่อยู่นิ่ง ๆ บนดิสก์ (เช่น a.out) — ยังไม่มีตัวตนในระบบ</li>
+                            <li><Term word="Process"><strong>Process</strong></Term> คือโปรแกรมที่ถูกโหลดเข้าหน่วยความจำแล้ว "มีชีวิต" — มี <Term word="PID">PID</Term> ของตัวเอง มีหน่วยความจำส่วนตัว มีสถานะ (Ready/Running/Waiting)</li>
+                            <li>ทุก Process มีแม่ (ยกเว้นตัวแรก) — ไล่ขึ้นไปเรื่อย ๆ จะถึง <strong>init/systemd (PID 1)</strong> ซึ่งเป็นต้นตระกูลของทุก Process ในระบบ</li>
+                            <li>ดูต้นไม้ Process บน Linux ได้ด้วยคำสั่ง <code className="text-amber-600">pstree</code> หรือ <code className="text-amber-600">ps -ef</code> — ลองรันดูแล้วจะเห็นภาพทันที</li>
                         </ul>
+                        <p className="mt-3 text-sm text-slate-700"><span className="text-blue-600 font-bold">แนวคิดเดียวที่ต้องจำ:</span> ระบบ Unix รันโปรแกรมใหม่ได้ทางเดียวเท่านั้น = <strong>fork() ก่อน แล้วตามด้วย exec()</strong> สองฟังก์ชันนี้คือทุกอย่างของบทนี้</p>
                     </div>
 
                     <div className="bg-slate-50 p-5 rounded-xl border border-slate-300">
-                        <h3 className="text-xl font-bold text-slate-900 mb-3"><i className="fa-solid fa-wand-magic-sparkles mr-2 text-purple-600"></i> exec() — แปลงร่าง</h3>
+                        <h3 className="text-xl font-bold text-slate-900 mb-3"><Term word="fork()"><i className="fa-solid fa-code-branch mr-2 text-blue-600"></i> ขั้น 1: fork()</Term> — ก๊อปปี้ตัวเอง</h3>
+                        <p className="text-sm text-slate-700 mb-3">fork() คือคำสั่งที่ให้ OS สร้าง Process ใหม่ที่เป็น <strong>สำเนาทั้งดุ้นของตัวเอง</strong> — โค้ดเดียวกัน ตัวแปรค่าเดียวกัน แถมรันต่อจากบรรทัดเดียวกัน ต่างกันแค่ PID ผลลัพธ์เหมือนถ่ายเอกสารตัวเองเป็น 2 ชุดแล้วทั้งคู่ทำงานต่อ</p>
+                        <div className="bg-white p-4 rounded border border-slate-300 mb-3 text-sm text-slate-700">
+                            <strong className="text-blue-600 block mb-2">ค่าที่ fork() คืนกลับ (จำสามค่านี้ให้ขึ้นใจ — ออกสอบทุกปี):</strong>
+                            <ul className="list-disc ml-6 space-y-1">
+                                <li>คืน <strong className="text-emerald-600">&gt; 0</strong> ให้ <u>Parent</u> = ค่าคือ PID ของลูก (แม่จะรู้ว่าลูกเลขอะไร)</li>
+                                <li>คืน <strong className="text-emerald-600">0</strong> ให้ <u>Child</u> (ลูกไม่ต้องรู้ PID ตัวเอง — เรียก getpid() เอา)</li>
+                                <li>คืน <strong className="text-red-600">-1</strong> เมื่อสร้างไม่สำเร็จ (เช่น memory หมด หรือเกิน limit)</li>
+                            </ul>
+                        </div>
+                        <CodeBlock language="c" code={`#include <stdio.h>
+#include <unistd.h>
+
+int main() {
+    pid_t pid = fork();   // นับจากบรรทัดนี้ มี 2 process แล้ว!
+
+    if (pid < 0)  { printf("fork ล้มเหลว\n"); }
+    if (pid == 0) { printf("ผมคือลูก  PID = %d แม่ผมคือ %d\n", getpid(), getppid()); }
+    if (pid > 0)  { printf("ผมคือแม่  PID = %d ลูกผมคือ %d\n", getpid(), pid); }
+    return 0;
+}`} />
                         <ul className="list-disc ml-6 space-y-2 text-sm text-slate-700">
-                            <li><strong>ไม่สร้าง Process ใหม่!</strong> แต่แทนที่ Memory Image ของ Process ปัจจุบันด้วยโปรแกรมใหม่ทั้งหมด (PID เดิม)</li>
-                            <li><Term word="exec()">ตระกูล exec:</Term> <Term word="execlp"><code className="text-amber-600">execlp</code></Term>, <code className="text-amber-600">execvp</code>, <code className="text-amber-600">execv</code>, <code className="text-amber-600">execle</code> — ต่างกันที่วิธีส่ง argument (list vs array) และการระบุ path</li>
-                            <li><span className="text-red-600">จุดหลอก:</span> ถ้า exec() สำเร็จ โค้ดทุกบรรทัดที่อยู่หลัง exec() ใน process นั้นจะ<u>ไม่ถูกรันเลย</u> (โปรแกรมถูกแทนที่ไปแล้ว)</li>
-                            <li>คืนค่า -1 ก็ต่อเมื่อ exec ล้มเหลวเท่านั้น</li>
+                            <li><strong className="text-red-600">จุดหลอกอันดับ 1:</strong> หลัง fork() ทั้งแม่และลูกจะรันโค้ดบรรทัดถัดไปพร้อมกัน — <u>ใครก่อนใครหลังกำหนดไม่ได้</u> ขึ้นกับ Scheduler ดังนั้นโจทย์ที่ถามว่า "บรรทัดนี้พิมพ์ก่อนไหม" มักตอบไม่ได้!</li>
+                            <li><strong className="text-red-600">จุดหลอกอันดับ 2:</strong> Memory แยกกันเด็ดขาด — ลูกแก้ตัวแปรแล้วแม่ไม่เห็นผล (ใช้เทคนิค <Term word="Copy-on-Write">Copy-on-Write</Term> ก๊อปปี้เฉพาะส่วนที่ถูกเขียนจริง)</li>
+                            <li><strong className="text-red-600">จุดหลอกอันดับ 3:</strong> fork() n ครั้ง = 2<sup>n</sup> process (รวมแม่ตัวแรกด้วย) ไม่ใช่ n+1! เพราะทุก process ที่มีอยู่ตอนนั้นจะ fork กันหมดทุกตัว</li>
                         </ul>
+                        <p className="mt-3 text-sm text-slate-700 bg-blue-100 border border-blue-300 rounded p-3"><i className="fa-solid fa-lightbulb text-blue-600"></i> <strong>วิธีไล่โจทย์:</strong> วาด "ต้นไม้ Process" ทีละ fork — ทุกตัวที่อยู่บนกระดาษตอนนั้น จะแยกเป็น 2 ตัวเสมอ วนกี่ครั้งก็ใช้กฎเดิม</p>
                     </div>
 
                     <div className="bg-slate-50 p-5 rounded-xl border border-slate-300">
-                        <h3 className="text-xl font-bold text-slate-900 mb-3"><Term word="exit()"><i className="fa-solid fa-door-open mr-2 text-red-600"></i> exit()</Term> vs _exit()</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-700">
+                        <h3 className="text-xl font-bold text-slate-900 mb-3"><Term word="exec()"><i className="fa-solid fa-wand-magic-sparkles mr-2 text-purple-600"></i> ขั้น 2: exec()</Term> — แปลงร่าง</h3>
+                        <p className="text-sm text-slate-700 mb-3">exec() <u>ไม่สร้าง Process ใหม่</u> — มัน "ผีสิง" Process ตัวที่เรียก โดย<strong>ล้างหน่วยความจำเดิมแล้วโหลดโปรแกรมใหม่ทับทั้งตัว</strong> PID เดิม โค้ดเดิมหายเกลี้ยง ที่เหลือคือโปรแกรมใหม่</p>
+                        <div className="bg-white p-4 rounded border border-slate-300 mb-3 text-sm text-slate-700">
+                            <strong className="text-purple-600 block mb-1">ผลลัพธ์ที่ต้องรู้:</strong>
+                            <ul className="list-disc ml-6 space-y-1">
+                                <li>ถ้า exec <strong className="text-emerald-600">สำเร็จ</strong> → โค้ดที่อยู่หลัง exec() จะ<u>ไม่ถูกรันเด็ดขาด</u> (โปรแกรมถูกแทนที่ไปแล้ว ไม่มีทางกลับมา)</li>
+                                <li>exec คืนค่า <strong className="text-red-600">-1</strong> ก็ต่อเมื่อ<u>ล้มเหลว</u>เท่านั้น — ดังนั้นโค้ดหลัง exec() จะถูกรันก็ต่อเมื่อ exec พัง (นิยมใส่ perror() + exit(1) ไว้หลัง exec เพื่อดัก error)</li>
+                            </ul>
+                        </div>
+                        <h4 className="font-bold text-slate-900 text-base mb-2">ตระกูล exec ทั้ง 6 ตัว — จำกฎ 4 ตัวอักษรให้ได้</h4>
+                        <p className="text-sm text-slate-700 mb-2">ทุกตัวทำหน้าที่เดียวกัน (แทนที่โปรแกรม) ต่างกันแค่ <strong>วิธีส่ง argument, การค้นหาโปรแกรม, และ environment</strong> จำง่าย ๆ ว่า:</p>
+                        <div className="flex flex-wrap gap-2 text-sm mb-3">
+                            <span className="bg-purple-100 text-purple-800 border border-purple-300 rounded px-3 py-1"><strong>l</strong> = list (เรียง argument เป็นตัว ๆ)</span>
+                            <span className="bg-purple-100 text-purple-800 border border-purple-300 rounded px-3 py-1"><strong>v</strong> = vector (ส่งเป็น array)</span>
+                            <span className="bg-purple-100 text-purple-800 border border-purple-300 rounded px-3 py-1"><strong>p</strong> = ค้นโปรแกรมจาก PATH</span>
+                            <span className="bg-purple-100 text-purple-800 border border-purple-300 rounded px-3 py-1"><strong>e</strong> = กำหนด environment เอง</span>
+                        </div>
+                        <div className="overflow-x-auto mb-3">
+                            <table className="w-full text-sm border border-slate-300 rounded-lg overflow-hidden">
+                                <thead className="bg-slate-100 text-slate-800">
+                                    <tr>
+                                        <th className="p-2 text-left">ฟังก์ชัน</th>
+                                        <th className="p-2 text-left">รูปแบบ argument</th>
+                                        <th className="p-2 text-center">ค้นจาก PATH?</th>
+                                        <th className="p-2 text-center">env กำหนดเอง?</th>
+                                        <th className="p-2 text-left">ตัวอย่าง</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="text-slate-700">
+                                    <tr className="border-t border-slate-300">
+                                        <td className="p-2 font-mono font-bold">execl</td>
+                                        <td className="p-2">list — ระบุ path เต็ม</td>
+                                        <td className="p-2 text-center text-red-600">✗</td>
+                                        <td className="p-2 text-center text-red-600">✗</td>
+                                        <td className="p-2 font-mono text-xs">execl("/bin/ls", "ls", "-l", NULL);</td>
+                                    </tr>
+                                    <tr className="border-t border-slate-300">
+                                        <td className="p-2 font-mono font-bold">execlp</td>
+                                        <td className="p-2">list</td>
+                                        <td className="p-2 text-center text-emerald-600">✓</td>
+                                        <td className="p-2 text-center text-red-600">✗</td>
+                                        <td className="p-2 font-mono text-xs">execlp("ls", "ls", "-l", NULL);</td>
+                                    </tr>
+                                    <tr className="border-t border-slate-300">
+                                        <td className="p-2 font-mono font-bold">execle</td>
+                                        <td className="p-2">list</td>
+                                        <td className="p-2 text-center text-red-600">✗</td>
+                                        <td className="p-2 text-center text-emerald-600">✓</td>
+                                        <td className="p-2 font-mono text-xs">execle("/bin/sh", "sh", "-c", "echo $HOME", NULL, envp);</td>
+                                    </tr>
+                                    <tr className="border-t border-slate-300">
+                                        <td className="p-2 font-mono font-bold">execv</td>
+                                        <td className="p-2">vector (array)</td>
+                                        <td className="p-2 text-center text-red-600">✗</td>
+                                        <td className="p-2 text-center text-red-600">✗</td>
+                                        <td className="p-2 font-mono text-xs">execv("/bin/ls", args);</td>
+                                    </tr>
+                                    <tr className="border-t border-slate-300">
+                                        <td className="p-2 font-mono font-bold">execvp</td>
+                                        <td className="p-2">vector</td>
+                                        <td className="p-2 text-center text-emerald-600">✓</td>
+                                        <td className="p-2 text-center text-red-600">✗</td>
+                                        <td className="p-2 font-mono text-xs">execvp("ls", args);</td>
+                                    </tr>
+                                    <tr className="border-t border-slate-300">
+                                        <td className="p-2 font-mono font-bold">execve</td>
+                                        <td className="p-2">vector</td>
+                                        <td className="p-2 text-center text-red-600">✗</td>
+                                        <td className="p-2 text-center text-emerald-600">✓</td>
+                                        <td className="p-2 font-mono text-xs">execve("/bin/ls", args, envp);</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <p className="text-sm text-slate-700 mb-2"><strong className="text-purple-600">เกร็ด:</strong> ทั้ง 6 ตัวนี้ ตัวจริงที่คุยกับ Kernel มีตัวเดียวคือ <code className="text-amber-600">execve</code> — ที่เหลือเป็นฟังก์ชันห่อ (wrapper) ที่แปลง list→array หรือไปค้น PATH ให้แล้วค่อยเรียก execve อีกที</p>
+                        <CodeBlock language="c" code={`// ลองไล่ดูแต่ละแบบ ต่างกันตรง "วิธีส่ง" เท่านั้น
+char *args[] = {"ls", "-l", NULL};        // array ใช้กับตระกูล v
+char *envp[] = {"HOME=/root", NULL};      // env ใช้กับตระกูล e
+
+execl ("/bin/ls", "ls", "-l", NULL);           // l: เรียงเป็น list
+execlp("ls",      "ls", "-l", NULL);           // lp: list + ค้น PATH
+execle("/bin/sh", "sh", "-c", "echo $HOME", NULL, envp); // le: list + env
+execv ("/bin/ls", args);                       // v: array
+execvp("ls",      args);                       // vp: array + PATH
+execve("/bin/ls", args, envp);                 // ve: array + env (system call จริง)
+
+// ทุกตัว: argument ตัวแรกคือ "ชื่อโปรแกรม" (argv[0]) ตัวสุดท้ายต้องเป็น NULL / ต้องจบด้วย NULL เสมอ`} />
+                        <p className="mt-3 text-sm text-slate-700 bg-purple-100 border border-purple-300 rounded p-3"><i className="fa-solid fa-lightbulb text-purple-600"></i> <strong>สูตรมาตรฐาน fork + exec:</strong> ลูกรัน exec เพื่อกลายเป็นโปรแกรมใหม่ ส่วนแม่ wait เก็บงาน — ดูตัวอย่างเต็ม ๆ ในขั้น 4</p>
+                    </div>
+
+                    <div className="bg-slate-50 p-5 rounded-xl border border-slate-300">
+                        <h3 className="text-xl font-bold text-slate-900 mb-3"><Term word="exit()"><i className="fa-solid fa-door-open mr-2 text-red-600"></i> ขั้น 3: exit()</Term> — จบชีวิตอย่างมีมารยาท</h3>
+                        <p className="text-sm text-slate-700 mb-3">exit(status) บอก OS ว่า "ฉันจบแล้ว พร้อมโน้ตฝากไว้ให้แม่" — <strong>status = 0 หมายถึงสำเร็จ, ไม่ใช่ 0 หมายถึงผิดพลาด</strong> (ตัวเลขที่แม่จะอ่านได้จาก wait)</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-700 mb-3">
                             <div className="bg-white p-4 rounded border border-slate-300">
                                 <strong className="text-red-600 block mb-1">exit(status)</strong>
-                                จบ process แบบ "สุภาพ" — <Term word="Buffer">เคลียร์ Buffer</Term> ทั้งหมด (<Term word="stdout">stdout</Term>), ปิดไฟล์, คืนสถานะให้ Parent ทาง wait()
+                                จบแบบ "สุภาพ" — <Term word="Buffer">เคลียร์ Buffer</Term> ทั้งหมด (<Term word="stdout">stdout</Term>), ปิดไฟล์ที่เปิดอยู่, แล้วคืน status ให้แม่
                             </div>
                             <div className="bg-white p-4 rounded border border-slate-300">
                                 <Term word="_exit()"><strong className="text-orange-600 block mb-1">_exit(status)</strong></Term>
-                                จบแบบ "ทันที" — ไม่เคลียร์ Buffer! ข้อความที่ค้างใน stdout buffer อาจหายไปไม่ถูกพิมพ์
+                                จบแบบ "ทันที" — ไม่เคลียร์ Buffer! ข้อความที่ค้างใน stdout buffer อาจหายไปไม่ถูกพิมพ์ (จุดหลอกยอดนิยมของข้อสอบ)
                             </div>
                         </div>
-                    </div>
-
-                    <div className="bg-slate-50 p-5 rounded-xl border border-slate-300">
-                        <h3 className="text-xl font-bold text-slate-900 mb-3"><Term word="wait()"><i className="fa-solid fa-handshake mr-2 text-emerald-600"></i> wait()</Term> & waitpid()</h3>
-                        <ul className="list-disc ml-6 space-y-2 text-sm text-slate-700">
-                            <li><strong className="text-slate-900">wait(NULL):</strong> Parent "หยุดรอ" (Block) จนกว่า Child <u>ตัวใดก็ได้</u> จบ แล้วคืน PID ของ Child ที่จบ</li>
-                            <li><Term word="waitpid()"><strong className="text-slate-900">waitpid(pid, &amp;status, options):</strong></Term> ระบุได้ว่ารอ Child ตัวไหน ใช้ option <Term word="WNOHANG"><code className="text-amber-600">WNOHANG</code></Term> เพื่อ "เช็คโดยไม่รอ" (ถ้ายังไม่จบ คืน 0 ทันที)</li>
-                            <li>ถ้า Parent เรียก wait() ทั้งที่ไม่มี Child อยู่เลย → คืน -1 ทันที</li>
+                        <ul className="list-disc ml-6 space-y-1 text-sm text-slate-700">
+                            <li><code className="text-amber-600">return n;</code> ใน main() เทียบเท่า <code className="text-amber-600">exit(n)</code> — compiler จัดการให้อัตโนมัติ</li>
+                            <li>ตอน exit นั้น Process จะกลายเป็น <strong>Zombie</strong> ชั่วคราว จนกว่าแม่จะมา wait รับ status (ดูขั้น 4-5)</li>
                         </ul>
                     </div>
 
+                    <div className="bg-slate-50 p-5 rounded-xl border border-slate-300">
+                        <h3 className="text-xl font-bold text-slate-900 mb-3"><Term word="wait()"><i className="fa-solid fa-handshake mr-2 text-emerald-600"></i> ขั้น 4: wait()</Term> — แม่เก็บงานของลูก</h3>
+                        <p className="text-sm text-slate-700 mb-3">หลัง fork หน้าที่ของแม่คือ <strong>wait</strong> — รอลูกทำงานเสร็จ รับ status ของลูก และช่วย OS "เก็บศพ" (ล้าง PCB ที่ค้างเป็น Zombie) ถ้าแม่ไม่ wait ลูกที่ตายแล้วจะกลายเป็น Zombie กินทรัพยากรระบบ</p>
+                        <div className="bg-white p-4 rounded border border-slate-300 mb-3 text-sm text-slate-700">
+                            <strong className="text-emerald-600 block mb-1">สองฟังก์ชันที่ใช้:</strong>
+                            <ul className="list-disc ml-6 space-y-1">
+                                <li><strong className="text-slate-900">wait(NULL)</strong> — Block รอจนกว่าลูก <u>ตัวใดก็ได้</u> จบ แล้วคืน PID ของลูกตัวนั้น (ไม่สนใจ status)</li>
+                                <li><Term word="waitpid()"><strong className="text-slate-900">waitpid(pid, &amp;status, options)</strong></Term> — เลือกรอลูกตัวที่เจาะจงได้ และใช้ <Term word="WNOHANG"><code className="text-amber-600">WNOHANG</code></Term> เพื่อ "เช็คโดยไม่รอ" (ลูกยังไม่จบ → คืน 0 ทันที แม่ไปทำงานอื่นต่อได้)</li>
+                                <li>ถ้าแม่เรียก wait() ทั้งที่<u>ไม่มีลูกเหลืออยู่</u> → คืน -1 ทันที (ไม่ block ค้าง)</li>
+                            </ul>
+                        </div>
+                        <p className="text-sm text-slate-700 mb-2"><strong>อ่าน status ยังไง?</strong> ใช้ macro จาก <code className="text-amber-600">&lt;sys/wait.h&gt;</code> — ตัวที่ออกสอบบ่อย:</p>
+                        <div className="flex flex-wrap gap-2 text-xs font-mono mb-3">
+                            <span className="bg-slate-100 border border-slate-300 rounded px-3 py-1">WIFEXITED(status) — จบด้วย exit เองหรือไม่</span>
+                            <span className="bg-slate-100 border border-slate-300 rounded px-3 py-1">WEXITSTATUS(status) — ค่า exit code (0-255)</span>
+                            <span className="bg-slate-100 border border-slate-300 rounded px-3 py-1">WIFSIGNALED(status) — ถูก signal ฆ่าหรือไม่</span>
+                        </div>
+                        <CodeBlock language="c" code={`#include <stdio.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <stdlib.h>
+
+int main() {
+    pid_t pid = fork();
+
+    if (pid == 0) {
+        // ---- ฝั่งลูก: แปลงร่างเป็น ls แล้วจบ ----
+        execlp("ls", "ls", "-l", NULL);
+        perror("exec ล้มเหลว");   // มาถึงบรรทัดนี้ = exec พังเท่านั้น
+        exit(1);
+    }
+
+    // ---- ฝั่งแม่: รอลูก + อ่าน status ----
+    int status;
+    waitpid(pid, &status, 0);     // 0 = รอแบบปกติ (block)
+
+    if (WIFEXITED(status)) {
+        printf("ลูกจบเองด้วย exit code = %d\n", WEXITSTATUS(status));
+    } else if (WIFSIGNALED(status)) {
+        printf("ลูกโดน signal ฆ่า!\n");
+    }
+    return 0;
+}`} />
+                    </div>
+
                     <div className="bg-slate-50 p-5 rounded-xl border border-red-300">
-                        <h3 className="text-xl font-bold text-red-600 mb-3"><i className="fa-solid fa-skull mr-2"></i> Zombie & Orphan (ออกสอบแน่นอน!)</h3>
+                        <h3 className="text-xl font-bold text-red-600 mb-3"><i className="fa-solid fa-skull mr-2"></i> ขั้น 5: Zombie & Orphan (ออกสอบแน่นอน!)</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-700">
                             <div className="bg-white p-4 rounded border border-slate-300">
                                 <Term word="Zombie"><strong className="text-red-600 block mb-1">Zombie Process</strong></Term>
@@ -966,10 +1118,83 @@
                                 แม่ตายก่อนลูก → ลูกถูกฝากให้ <strong>init / systemd (PID 1)</strong> รับเลี้ยง ซึ่ง init จะเรียก wait() ให้อัตโนมัติ ลูกจึงไม่ค้างเป็น Zombie
                             </div>
                         </div>
+                        <p className="mt-3 text-sm text-slate-700"><i className="fa-solid fa-lightbulb text-red-600"></i> <strong>สรุปให้จำภาพเดียว:</strong> Zombie = ลูกตายก่อน แม่ไม่เก็บศพ | Orphan = แม่ตายก่อน ลูกถูกส่งต่อไปเลี้ยง (จบอย่างปลอดภัย)</p>
+                    </div>
+
+                    <div className="bg-slate-50 p-5 rounded-xl border border-amber-300">
+                        <h3 className="text-xl font-bold text-amber-600 mb-3"><i className="fa-solid fa-pen-ruler mr-2"></i> ขั้น 6: สนามซ้อม — ไล่โค้ดด้วยตัวเองก่อนดูเฉลย</h3>
+                        <p className="text-sm text-slate-700 mb-3">วาดต้นไม้ Process + ไล่ทีละบรรทัด ห้ามเดา! กดลูกศรเพื่อเปิดเฉลย</p>
+
+                        <details className="bg-white p-4 rounded border border-slate-300 mb-3 text-sm text-slate-700">
+                            <summary className="cursor-pointer font-bold text-blue-600">โจทย์ 1: fork() 2 ครั้ง ง่าย ๆ ก่อน</summary>
+                            <CodeBlock language="c" code={`#include <stdio.h>
+#include <unistd.h>
+
+int main() {
+    printf("Start\n");
+    fork();
+    fork();
+    printf("Hello\n");
+    return 0;
+}`} />
+                            <p><strong>คำถาม:</strong> "Start" พิมพ์กี่ครั้ง และ "Hello" พิมพ์กี่ครั้ง?</p>
+                            <p className="mt-2 bg-emerald-100 border border-emerald-300 rounded p-3"><strong>เฉลย:</strong> Start = 1 ครั้ง (อยู่ก่อน fork แรก ตอนนั้นยังมี process เดียว) | Hello = 4 ครั้ง (หลัง fork 2 ครั้งมี 2² = 4 process ทุกตัววิ่งถึง printf)</p>
+                        </details>
+
+                        <details className="bg-white p-4 rounded border border-slate-300 mb-3 text-sm text-slate-700">
+                            <summary className="cursor-pointer font-bold text-blue-600">โจทย์ 2: ตัวแปรหลัง fork — Memory แยกกันจริงไหม</summary>
+                            <CodeBlock language="c" code={`int x = 5;
+
+int main() {
+    pid_t pid = fork();
+
+    if (pid == 0) {
+        x += 10;
+        printf("Child : x = %d\n", x);
+        exit(0);
+    } else {
+        wait(NULL);
+        printf("Parent: x = %d\n", x);
+    }
+    return 0;
+}`} />
+                            <p><strong>คำถาม:</strong> ลูกพิมพ์อะไร? แม่พิมพ์อะไร?</p>
+                            <p className="mt-2 bg-emerald-100 border border-emerald-300 rounded p-3"><strong>เฉลย:</strong> Child พิมพ์ <strong>x = 15</strong> (แก้แล้ว) แต่ Parent พิมพ์ <strong>x = 5</strong> — เพราะหลัง fork ทั้งคู่แยก Memory กันเด็ดขาด ลูกแก้ของลูก แม่ไม่เห็น</p>
+                        </details>
+
+                        <details className="bg-white p-4 rounded border border-slate-300 mb-3 text-sm text-slate-700">
+                            <summary className="cursor-pointer font-bold text-blue-600">โจทย์ 3: fork ในลูป — กับดักคลาสสิก</summary>
+                            <CodeBlock language="c" code={`int main() {
+    for (int i = 0; i < 2; i++) {
+        fork();
+    }
+    printf("P\n");
+    return 0;
+}`} />
+                            <p><strong>คำถาม:</strong> "P" พิมพ์กี่ครั้ง?</p>
+                            <p className="mt-2 bg-emerald-100 border border-emerald-300 rounded p-3"><strong>เฉลย:</strong> 4 ครั้ง — อย่าคิดว่า 3! รอบแรก 1→2 ตัว รอบสอง <u>ทั้ง 2 ตัว</u> fork กันหมด → 4 ตัวทุกตัวพิมพ์ P</p>
+                        </details>
+
+                        <details className="bg-white p-4 rounded border border-slate-300 mb-3 text-sm text-slate-700">
+                            <summary className="cursor-pointer font-bold text-blue-600">โจทย์ 4: fork + exec — โค้ดหลัง exec รันไหม?</summary>
+                            <CodeBlock language="c" code={`int main() {
+    pid_t pid = fork();
+
+    if (pid == 0) {
+        execlp("/bin/echo", "echo", "Hello from child", NULL);
+        printf("บรรทัดนี้จะรันหรือไม่?\n");
+    }
+    wait(NULL);
+    printf("Done\n");
+    return 0;
+}`} />
+                            <p><strong>คำถาม:</strong> ผลลัพธ์ที่เห็นบนจอคืออะไร? (สมมติ echo อยู่ใน PATH แน่นอน)</p>
+                            <p className="mt-2 bg-emerald-100 border border-emerald-300 rounded p-3"><strong>เฉลย:</strong> พิมพ์ "Hello from child" (จากโปรแกรม echo ตัวใหม่ที่แทนที่ลูก) แล้ว "Done" (จากแม่) — ส่วน "บรรทัดนี้จะรันหรือไม่?" <u>ไม่พิมพ์</u> เพราะ exec สำเร็จแล้ว ลูกกลายเป็น echo ไปแล้ว ไม่มีโค้ดเดิมเหลือให้รัน</p>
+                        </details>
                     </div>
 
                     <div className="bg-slate-50 p-5 rounded-xl border border-slate-300 text-sm text-slate-700">
-                        <h3 className="text-xl font-bold text-slate-900 mb-3"><i className="fa-solid fa-circle-stop mr-2 text-orange-600"></i> Process จบการทำงานด้วยวิธีใดได้บ้าง</h3>
+                        <h3 className="text-xl font-bold text-slate-900 mb-3"><i className="fa-solid fa-circle-stop mr-2 text-orange-600"></i> ขั้น 7: Process จบการทำงานด้วยวิธีใดได้บ้าง</h3>
                         <ul className="list-disc ml-6 space-y-1">
                             <li>เรียก <code className="text-amber-600">exit()</code> หรือ <code className="text-amber-600">_exit()</code></li>
                             <li><code className="text-amber-600">return</code> จาก main() (เทียบเท่า exit)</li>
